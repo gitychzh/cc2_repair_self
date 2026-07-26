@@ -1,7 +1,9 @@
-# Only track gateway_backup/ snapshot tree in this repo.
+# Track gateway_backup/ and gateway_backup.* snapshot trees in this repo.
 # Ignore everything else (agent working files, state, session jsonl, bak files).
 *
 !/.gitignore
 !/gateway_backup/
 !/gateway_backup/**
+!/gateway_backup.cc_s3/
+!/gateway_backup.cc_s3/**
 !/README_BACKUP.md
