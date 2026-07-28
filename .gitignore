@@ -1,5 +1,6 @@
 # Track gateway_backup/ and gateway_backup.* snapshot trees in this repo.
-# Ignore everything else (agent working files, state, session jsonl, bak files).
+# Also track task definition (CLAUDE.md) and run state (STATE.md).
+# Ignore everything else (agent working files, session jsonl, bak files, tmp logs).
 *
 !/.gitignore
 !/gateway_backup/
@@ -7,3 +8,7 @@
 !/gateway_backup.cc_s3/
 !/gateway_backup.cc_s3/**
 !/README_BACKUP.md
+!/CLAUDE.md
+!/STATE.md
+!/specs/
+!/specs/**
