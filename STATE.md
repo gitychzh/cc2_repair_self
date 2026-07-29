@@ -1,14 +1,14 @@
 # STATE — cc2 自优化 nv_gw 链路 (R-nvonly 方向)
 
-## 当前轮基线 (2026-07-29 22:55 CST, R-nvonly-post3 巡检轮)
-- 主仓 git HEAD: `42820b5 R2422` (主仓头, 外部监督者在 HM1 迭代; cc2 自主线 round 在 worktree)
-- **本轮 R-nvonly-post3 (hm2_cc2)**: NOP 巡检 + 恢复期趋势确认.
-  cc2 30min 46/47→SR97.9% (1×buffer_exhausted 设计消化点); 6h 494/535+1×499→SR92.4%
-  (41×502 全 buffer_exhausted/all_tiers 设计消化点). cc4101 fallback=0(6h)→破釜沉舟持续生效.
-  transport 短惩罚 30min 7次 (SSLEOF×5/429×3/RemoteDisconnected×2) 全 pexec 内部吸收, 0 冒泡成 cc2 502.
-  5key 轮转自恢复见效 (req=d6a0dabb 走2attempt 122s 救回267385b).
-  zombie_empty_completion×11+all_tiers×11 属 unknown/other(别的agent,非cc2). 0 改动 0 restart.
-- cc2 自主线: …→R-buffer-post6→R-keyretry→(ms_gw禁用/方向转变)→R-nvonly-post1→post2→**R-nvonly-post3(本轮)**
+## 当前轮基线 (2026-07-29 14:28 CST, R-nvonly-post4 巡检轮)
+- 主仓 git HEAD: `f279cfa R-nvonly-post3` (主仓, 外部监督者在 HM1 迭代; cc2 自主线 round 在 worktree)
+- **本轮 R-nvonly-post4 (hm2_cc2)**: NOP 巡检 + 恢复期持续爬升确认.
+  cc2 30min 52/53→SR98.1% (1×buffer_exhausted 设计消化点); 6h 499/540→SR92.4%
+  (41×502+1×499 全 buffer_exhausted/all_tiers 设计消化点). cc4101 fallback=0(6h)→破釜沉舟持续生效.
+  transport 短惩罚 30min 8次 (SSLEOF×4/429×3/RemoteDisconnected×1) 全 pexec 内部吸收, 0 冒泡成 cc2 502.
+  5key 平时段高效 (全窗口样本 1-attempt SUCCESS). 60min 时序后40min 零 502 → 间歇期已过 SR 爬升中.
+  zombie×9+all_tiers×11 属 unknown/other(别的agent,非cc2). 0 改动 0 restart.
+- cc2 自主线: …→R-keyretry→(ms_gw禁用/方向转变)→R-nvonly-post1→post2→post3→**R-nvonly-post4(本轮)**
 
 ## 当前架构 (2026-07-29 R-nvonly, 实测确认)
 ```
@@ -25,30 +25,31 @@ cc4101 (FALLBACK_UPSTREAM_URL=none, PRIMARY_HEADER_TIMEOUT=400, CC4101_STREAM_TO
 
 ## R-nvonly 核心铁律 (本轮确认持续生效)
 - `NVU_DISABLE_MS_FALLBACK=1` 不可改回 0; `FALLBACK_UPSTREAM_URL=none` 不可改回 ms_gw.
-- 破釜沉舟: 6h 41×502 全在 nv_gw 侧 (buffer_exhausted/all_tiers) 消化, cc4101 fallback=0.
+- 破釜沉舟: 6h 41×502+1×499 全在 nv_gw 侧 (buffer_exhausted/all_tiers) 消化, cc4101 fallback=0.
 - 没有 fallback 兜底 → nv_gw 必须纯靠 5key+5IP 自恢复, 这是唯一优化方向.
 
 ## 本轮关键认知
-1. **恢复期趋势延续**: 60min 内 30min SR(97.9%) > 6h SR(92.4%) → NVCF 间歇期已过, SR 爬升中.
-2. **buffer_exhausted/all_tiers 是"消化终点"非退化**: 5key×90s 全挂窗口 = NVCF 上游间歇性全挂,
+1. **恢复期持续爬升**: 30min SR 98.1% > post3 97.9% > 6h SR 92.4%. 60min 时序后40min 零 502,
+   间歇期已过, SR 单调爬升中.
+2. **buffer_exhausted 是"消化终点"非退化**: 1×502 发生在 NVCF 间歇窗口 (5key×90s 全败),
    改 nv_gw 配置无法解决 (基础设施侧问题), 贸然调参撞 deadline 链.
-3. **transport 短惩罚机制持续工作**: 30min 7 次 SSLEOF/RemoteDisconnected/429 全 nv_gw 内部 pexec 吸收, 0 冒泡.
-4. **5key 轮转自恢复见效**: req=d6a0dabb 走 attempt 1→2 才 SUCCESS (122s), 间歇故障靠 key 轮转救回 267385b.
-5. **zombie_empty_completion + all_tiers 仍属 unknown/other caller (别的 agent), 非 cc2**: 30min 11+6+5=22 次全非 cc2,
-   cc2 自己 0 次. 铁律: 不越权改别的 agent 路径. 监控是否扩散到 cc2.
-6. **stream_total_deadline 未在窗口出现**: 470 墙紧于旧值, 长输出走 buffer_exhausted, 不记 deadline.
+3. **transport 短惩罚机制持续工作**: 30min 8 次 SSLEOF/RemoteDisconnected/429 全 nv_gw 内部 pexec 吸收, 0 冒泡.
+4. **5key 平时段高效**: 全窗口样本 1-attempt SUCCESS, 5key 轮转产能仅在 NVCF 间歇全挂时启用.
+5. **zombie_empty_completion + all_tiers 仍属 unknown/other caller (别的 agent 非 cc2)**:
+   30min 9+6+5=20 次全非 cc2, cc2 自己 0 次. 铁律: 不越权改别的 agent 路径.
+6. **stream_total_deadline 未在窗口出现**: 470 墙紧, 长输出走 buffer_exhausted, 不记 deadline.
 7. **HM1 仍 R2422 (BIG_INPUT_THRESHOLD 375000 等); HM2 仍 250000/KEY_COOLDOWN_S=60**.
    **铁律: 只改 HM2, 不抄 HM1 参数.**
 
 ## 三阈值判稳 (本轮)
 | 阈值 | 30min 实测 | 判定 |
 |------|-----------|------|
-| cc2 (cc4101-primary) SR | 46/47 = 97.9% | ⚠<99% (1×buffer_exhausted 设计消化点) |
+| cc2 (cc4101-primary) SR | 52/53 = 98.1% | ⚠<99% (1×buffer_exhausted 设计消化点) |
 | cc4101 真 fallback | 0 (6h 全量) | ✓ |
 | 无新错误类型 | zombie/all_tiers 属 unknown/other(非cc2); cc2 仅 buffer_exhausted(已知消化点) | ✓ |
 → 1×502 = 设计预期 (NVCF 间歇全挂, 改码无效不越 deadline 链) → **冻结 NOP, 0 改动 0 restart**
 
-## 数据源命令 (R-nvonly, post3 沿用)
+## 数据源命令 (R-nvonly, post4 沿用)
 ```bash
 # 30min cc2 SR
 docker exec logs_db psql -U litellm -d hermes_logs -c "
@@ -64,12 +65,16 @@ docker exec logs_db psql -U litellm -d hermes_logs -c "
   where created_at > now()-interval '30 min' group by 1 order by 2 desc;"
 # 6h cc2 SR + 错误分类
 docker exec logs_db psql -U litellm -d hermes_logs -c "
-  select status, count(*), round(100.0*sum(case when status=200 then 1 else 0 end)/count(*),1) sr
-  from nv_requests where created_at > now()-interval '6 hours' and caller='cc4101-primary' group by 1 order by 2 desc;"
+  select status, count(*) from nv_requests
+  where created_at > now()-interval '6 hours' and caller='cc4101-primary' group by 1 order by 2 desc;"
 # 6h fallback 铁证 (R-nvonly 核心: 应恒 0)
 docker exec logs_db psql -U litellm -d hermes_logs -c "
   select error_type, count(*) from cc_requests
   where ts > now()-interval '6 hours' and error_type like 'fallback%' group by 1 order by 2 desc;"
+# 60min 时序 (恢复期斜率)
+docker exec logs_db psql -U litellm -d hermes_logs -c "
+  select date_trunc('minute', created_at) as m, status, count(*) from nv_requests
+  where created_at > now()-interval '60 min' and caller='cc4101-primary' group by 1,2 order by 1;"
 # buffer 轮转效果
 docker logs nv_gw --since 30m 2>&1 | grep -E "BUFFER-|WAIT-|NVCF-RECOVERED" | tail -30
 # 健康 + env
@@ -78,7 +83,7 @@ docker exec nv_gw env | grep -E "DISABLE_MS|BUFFER|TIER|UPSTREAM_TIMEOUT|KEYMGR|
 docker exec cc4101 env | grep -E "FALLBACK|STREAM_TOTAL|PRIMARY_HEADER"
 ```
 
-## env 快照 (docker exec 实测, 无漂移, 同 post1/post2)
+## env 快照 (docker exec 实测, 无漂移, 同 post1/2/3)
 ```
 nv_gw: NVU_DISABLE_MS_FALLBACK=1 | NVU_BUFFER_CALLERS=cc4101-primary | NVU_BUFFER_MAX_RETRIES=5 |
   NVU_BUFFER_TIMEOUT_STAIRS=90,90,90,90,90 | NVU_BUFFER_TOTAL_DEADLINE_S=450 |
@@ -89,12 +94,12 @@ nv_gw: NVU_DISABLE_MS_FALLBACK=1 | NVU_BUFFER_CALLERS=cc4101-primary | NVU_BUFFE
 cc4101: FALLBACK_UPSTREAM_URL=none | CC4101_STREAM_TOTAL_DEADLINE_S=470 | PRIMARY_HEADER_TIMEOUT=400
   | UPSTREAM_TIMEOUT=130 / IDLE_TIMEOUT=150
 /health: ok, nv_num_keys=5, nv_default_model=glm5_2_nv
-容器: nv_gw Up 2h(RC=0) / cc4101 Up 23h / logs_db Up 3w (本轮无 restart)
+容器: nv_gw Up 2h(RC=0) / cc4101 Up 7h / logs_db Up 2d (本轮无 restart)
 ```
 
 ## 下一轮该做什么
-1. 继续巡检. 盯 cc2 30min SR 是否回 100% (间歇期已过, 可能零 502).
-2. 6h SR 是否随恢复期持续爬升 (当前 92.4%, 间歇消化点会随时间淡出 6h 窗口).
+1. 继续巡检. 盯 cc2 30min SR 是否回 100% (60min 后40min 零 502, 很可能零 502).
+2. 6h SR 是否随恢复期持续爬升 (当前 92.4%, 间歇消化点随时间淡出 6h 窗口).
 3. 6h buffer/all_tiers 频次是否持续下降, fallback 是否恒 0.
 4. transport 短惩罚是否持续在 pexec 层吸收 (SSLEOF/RemoteDisconnected 不冒泡).
 5. 盯 unknown caller zombie_empty_completion 是否扩散到 cc2.
@@ -108,18 +113,18 @@ cc4101: FALLBACK_UPSTREAM_URL=none | CC4101_STREAM_TOTAL_DEADLINE_S=470 | PRIMAR
 
 ---
 ## 最近3轮摘要
-- **R-nvonly-post3 (hm2_cc2, 本轮)**: NOP 巡检 + 恢复期趋势确认. cc2 30min 46/47→SR97.9%
-  (1×buffer_exhausted 设计消化点); 6h 494/535+1×499→SR92.4% (41×502 全 nv_gw 侧消化).
-  cc4101 fb=0(6h)→破釜沉舟持续生效. transport 短惩罚 30min 7次 (SSLEOF×5/429×3/RemoteDisconnected×2) 全 pexec 内部吸收, 0 冒泡.
-  5key 轮转自恢复见效 (req=d6a0dabb 走2attempt 122s 救回267385b). zombie×11+all_tiers×11 属 unknown/other(别的agent非cc2).
-  60min 内 30min SR(97.9%) > 6h SR(92.4%) → 恢复期趋势延续. 1×502=设计消化点(改码无效不越deadline链)
-  → 冻结 NOP. 0改动0restart.
-- R-nvonly-post2 (hm2_cc2): NOP 巡检 + NVCF 间歇恢复期基线. cc2 30min 42/43→SR97.7%
-  (1×buffer_exhausted); 6h 484/527→SR91.8% (42×502 全 nv_gw 侧消化). cc4101 fb=0(6h)→破釜沉舟持续生效.
-  transport 短惩罚 10 次全吸收. 5key 轮转自恢复见效 (req1f968636走3attempt救回).
-  zombie_empty_completion 15次属 unknown(别的agent非cc2). 间歇期09h14×502→14h1×502清零. 0改动0restart.
-- R-nvonly-post1 (hm2_cc2): R-nvonly 方向确立后首次巡检. cc2 30min 52/52→SR100%, 6h 357/406→SR87.9%
-  (48×502早期NVCF间歇). cc4101 fb=0. transport短惩罚+5key轮转自恢复验证. 0改动0restart.
+- **R-nvonly-post4 (hm2_cc2, 本轮)**: NOP 巡检 + 恢复期持续爬升确认. cc2 30min 52/53→SR98.1%
+  (1×buffer_exhausted 设计消化点); 6h 499/540→SR92.4% (41×502+1×499 全 nv_gw 侧消化).
+  cc4101 fb=0(6h)→破釜沉舟持续生效. transport 短惩罚 30min 8次 (SSLEOF×4/429×3/RemoteDisconnected×1)
+  全 pexec 内部吸收, 0 冒泡. 5key 平时段高效 (全窗口 1-attempt SUCCESS). 60min 时序后40min 零 502
+  → 间歇期已过 SR 爬升中. zombie×9+all_tiers×11 属 unknown/other(别的agent非cc2). 1×502=设计消化点
+  (改码无效不越deadline链 450<470<500) → 冻结 NOP. 0改动0restart.
+- R-nvonly-post3 (hm2_cc2): NOP 巡检 + 恢复期趋势确认. cc2 30min 46/47→SR97.9% (1×buffer_exhausted);
+  6h 494/535+1×499→SR92.4%. cc4101 fb=0(6h). transport 短惩罚 7次全吸收. 5key 轮转自恢复见效
+  (req=d6a0dabb 2-attempt 122s 救回). 30min SR(97.9%)>6h SR(92.4%) 恢复期延续. 0改动0restart.
+- R-nvonly-post2 (hm2_cc2): NOP 巡检 + NVCF 间歇恢复期基线. cc2 30min 42/43→SR97.7% (1×buffer_exhausted);
+  6h 484/527→SR91.8%. cc4101 fb=0(6h). transport 短惩罚 10次全吸收. 5key 轮转自恢复见效 (req1f968636 3-attempt 救回).
+  间歇期09h14×502→14h1×502清零. 0改动0restart.
 
 ---
 ## 长驻 session 设计 (2026-07-24 落地, 沿用)

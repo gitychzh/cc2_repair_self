@@ -21,32 +21,36 @@
 >    你的任务是让 nv_gw 自身足够稳, 不需要 fallback.
 > 3. 你的优化目标是 "**让 nv_gw 纯靠 5key+5IP 自恢复, SR 99%+, 0 fallback**"。
 
-## R-nvonly 当前架构 (2026-07-28 部署, 你必须了解)
+## R-cc2-optimize 当前架构 (2026-07-28 优化版, 你必须了解)
 
 ```
-cc4101 (FALLBACK_UPSTREAM_URL=none, STREAM_TOTAL_DEADLINE=400s)
-  → nv_gw (NVU_DISABLE_MS_FALLBACK=1, buffer 90s×4=380s, total_deadline=380s)
+cc4101 (FALLBACK_UPSTREAM_URL=none, PRIMARY_HEADER_TIMEOUT=400s, STREAM_TOTAL_DEADLINE=470s)
+  → nv_gw (NVU_DISABLE_MS_FALLBACK=1, buffer 90s×5=450s, total_deadline=450s)
     → KeyManager (429: 120s→600s 指数退避; RemoteDisconnected: 5s 快速惩罚不累计 conn_count)
     → ProbeWorker (后台 15s 探测 cooling key 恢复, set Event 唤醒 WaitQueue)
-    → BufferStreamSession (4key 轮转: k2→k5→k3→k4, 90s/attempt, 4 attempts)
+    → BufferStreamSession (5key 轮转: k0→k1→k2→k3→k4, 90s/attempt, 5 attempts)
+    → 非流式 buffer 重试 (NV-NONSTREAM-BUFFER-RETRY: 非流式请求也走 buffer 5key 保护)
     → WaitQueue (全挂后 event-driven 等 NVCF 恢复, max 120s, 不 fallback ms)
     → nv_breaker (mid-stream 软挂累积 → OPEN, 但 OPEN 后也不走 ms, 走 graceful end)
+    → mihomo: ♻️US-NV-K1~K5 各绑 hysteria2 节点 (美国01-05, 各不同IPv4, 不走cloudflare)
 ```
 
-**关键 deadline 层级 (对齐后)**:
+**关键 deadline 层级 (实测 2026-07-29)**:
 - `UPSTREAM_TIMEOUT=90s` < `NVU_TIER_BUDGET_GLM5_2_NV=120s` (NVCF 单次)
-- `NVU_BUFFER_TIMEOUT_STAIRS=90,90,90,90` (buffer 4 次 attempt 每次 90s)
-- `NVU_BUFFER_TOTAL_DEADLINE_S=380s` (buffer 总预算)
-- `CC4101_STREAM_TOTAL_DEADLINE_S=400s` (cc4101 总上限, 给 buffer flush 留 20s)
-- `CLAUDE_STREAM_IDLE_TIMEOUT_MS=850000` (cc2 SDK 侧, 给 cc4101 400s + 余量)
+- `NVU_BUFFER_TIMEOUT_STAIRS=90,90,90,90,90` (buffer 5 次 attempt 每次 90s)
+- `NVU_BUFFER_TOTAL_DEADLINE_S=450s` (buffer 总预算, 5key×90s)
+- `CC4101_STREAM_TOTAL_DEADLINE_S=470s` (cc4101 总上限, 给 buffer 450s + 20s)
+- `PRIMARY_HEADER_TIMEOUT=400s` (cc4101 不再 60s 抢断 buffer)
+- `API_TIMEOUT_MS=600000` (cc2 SDK 侧, settings.json 实测值)
+- `CLAUDE_STREAM_IDLE_TIMEOUT_MS=500000` (cc2 SDK idle, 给 buffer 450s + 余量)
 
 **R-nvonly 已做的改动 (基础设施侧, 不是你做的, 你要理解)**:
 1. `key_manager.py`: 新增 `mark_transport_error` — RemoteDisconnected/SSL EOF → 5-10s 短惩罚,
    不累计 `conn_count` (旧逻辑 30s+ 累计 3 次 → 120s 长冷却, 误判为连接级故障)
 2. `upstream.py`: `_glm52_single_attempt` 中 RemoteDisconnected/SSL → 调 `_km_mark_transport`
    (非旧的 `_km_mark_conn`), 快速恢复 key 可用性
-3. `docker-compose.yml nv_gw`: `NVU_BUFFER_TIMEOUT_STAIRS=90,90,90,90` (原 150), `NVU_BUFFER_TOTAL_DEADLINE_S=380` (原 600)
-4. `docker-compose.yml cc4101`: `CC4101_STREAM_TOTAL_DEADLINE_S=400` (原 800), `FALLBACK_UPSTREAM_URL=none` (禁用 ms fallback)
+3. `docker-compose.yml nv_gw`: `NVU_BUFFER_TIMEOUT_STAIRS=90,90,90,90,90` (5次×90s), `NVU_BUFFER_TOTAL_DEADLINE_S=450` (5key×90s)
+4. `docker-compose.yml cc4101`: `CC4101_STREAM_TOTAL_DEADLINE_S=470` (给 buffer 450s+20s), `FALLBACK_UPSTREAM_URL=none` (禁用 ms fallback)
 5. nv_gw 重构 4 层: KeyManager + ProbeWorker + WaitQueue + BufferStreamSession
 
 ## 铁律（不可违反，违反=自毁链路）
@@ -76,8 +80,8 @@ cc4101 (FALLBACK_UPSTREAM_URL=none, STREAM_TOTAL_DEADLINE=400s)
 - DB 查: `select error_type, count(*) from nv_tier_attempts where created_at > now()-interval '30 min' group by 1 order by 2 desc;`
 - 期望: `RemoteDisconnected` 相关错误减少, key 冷却时间缩短
 
-### 2. BufferStreamSession 4key 轮转效果
-- 4 次 attempt (k2→k5→k3→k4), 每次 90s, 总 380s
+### 2. BufferStreamSession 5key 轮转效果
+- 5 次 attempt (k0→k1→k2→k3→k4), 每次 90s, 总 450s
 - 你要验证: 多少请求 1 次成功, 多少需 2-4 次重试, 多少 4 次全败
 - 日志: `docker logs nv_gw 2>&1 | grep -E "BUFFER-ATTEMPT|BUFFER-SUCCESS|BUFFER-EXHAUSTED" | tail -30`
 
@@ -87,7 +91,7 @@ cc4101 (FALLBACK_UPSTREAM_URL=none, STREAM_TOTAL_DEADLINE=400s)
 - 日志: `docker logs nv_gw 2>&1 | grep -E "WAIT-QUEUE|WAIT-TIMEOUT|NVCF-RECOVERED" | tail -20`
 
 ### 4. deadline 链对齐验证
-- 90s × 4 = 380s buffer < 400s cc4101 < 850s SDK
+- 90s × 5 = 450s buffer < 470s cc4101 < 500s SDK idle
 - 你要验证: `stream_total_deadline` 是否稳定在低频次 (期望 <5/h)
 - DB 查: `select date_trunc('hour', ts) as hr, count(*) from cc_requests where ts > now()-interval '6 hours' and error_type='stream_total_deadline' group by 1 order by 1;`
 
