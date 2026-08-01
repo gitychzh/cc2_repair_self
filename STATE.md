@@ -1,13 +1,13 @@
 # STATE — cc2 自优化 nv_gw 链路 (R-nvonly 方向)
 
-## 当前轮基线 (2026-08-02 05:40 CST, R-nvonly-post83 NOP 巡检轮)
-- 主仓 git HEAD: 4add610 (上轮 post82), 本轮 post83 待 push
-- **本轮 R-nvonly-post83 (hm2_cc2)**: NOP 巡检轮. cc2 30min 0 req (session 轮前无流量产生, 无数据可判 SR).
+## 当前轮基线 (2026-08-02 05:37 CST, R-nvonly-post84 NOP 巡检轮)
+- 主仓 git HEAD: 4768980 (上轮 post83), 本轮 post84 待 push
+- **本轮 R-nvonly-post84 (hm2_cc2)**: NOP 巡检轮. cc2 30min 0 req (session 轮前无流量产生, 无数据可判 SR).
   链路健康无故障: 容器全 Up (nv_gw/cc4101/nv_gw_stable 4h, ms_gw/logs_db 2d),
   /health ok (glm5_2_nv, 5 keys, pexec=[kimi_nv,dsv4p_nv,glm5_2_nv]),
   0 cc2 tier error, 0 cc2 buffer/wait/error 日志, 0 stream_total_deadline (6h). 0 改动, 0 重启.
-  hermes/openclaw 打 dsv4p_nv SR=36.4% (4/11, 5×all_tiers_exhausted+5×429+2×zombie 502) 是 NVCF 侧 dsv4p 限流, 非 cc2 链路 (cc2 走 glm5_2_nv).
-- round 文件: `~/hm_ps/hermes_improve_self/rounds/R-nvonly-post83_hm2_cc2_nop_patrol.md`
+  hermes 打 dsv4p_nv SR=0.0% (0/6, 6×429+all_tiers_exhausted, 周期性 5min 一发) 是 NVCF 侧 dsv4p 限流, 非 cc2 链路 (cc2 走 glm5_2_nv).
+- round 文件: `~/hm_ps/hermes_improve_self/rounds/R-nvonly-post84_hm2_cc2_nop_patrol.md`
 
 ## R-nvonly 核心铁律 (持续生效)
 - 只改 HM2 nv_gw (40006), 不碰 HM1, 不碰 ms_gw 源码.
@@ -20,21 +20,28 @@
 本轮 30min 窗口 cc2 无请求产生 (session 轮前无流量). 无数据可判 cc2 SR.
 链路健康无故障: 容器全 Up, /health ok, 0 cc2 tier error, 0 cc2 buffer/wait/error 日志, 0 stream_total_deadline (6h).
 
-### 2. 其他 caller (hermes/openclaw, 非 cc2 链路)
+### 2. 其他 caller (hermes, 非 cc2 链路)
 | caller | model | status | count |
 |--------|-------|--------|-------|
-| hermes | dsv4p_nv | 200 | 4 |
-| hermes | dsv4p_nv | 429 | 5 |
-| openclaw | dsv4p_nv | 502 | 2 |
+| hermes | dsv4p_nv | 429 | 6 |
 
-dsv4p_nv SR=36.4% (4/11): 5×all_tiers_exhausted (5key 全挂) + 5×429 (NVCF 侧 dsv4p 限流, 周期性 21:00/10/15/20/25) + 2×zombie_empty_completion (502, key3).
+dsv4p_nv SR=0.0% (0/6): 6×429 (all_tiers_exhausted, 5key 全挂).
 **与 cc2 无关** (cc2 走 glm5_2_nv, 不打 dsv4p_nv).
-per-IP: 203.10.96.139=4×100%, 134.195.101.194=2×0% (502), 空 egress=5×0% (429, IP漂移).
-per-key: key2=4×200, key3=2×502, key?=5×429.
-200 延迟 avg_dur=14394ms, finish_reason: tool_calls×3, stop×1 (zombie 来自 502 非 200).
-30min fallback 发生率: f=11 (dsv4p 全挂 fallback ms).
+30min fallback 发生率: f=6 (dsv4p 全挂 fallback ms).
 
-### 3. 健康验证 (05:40 CST)
+### 3. dsv4p_nv 按分钟趋势 (周期性 429)
+| 分钟 | status | count |
+|------|--------|-------|
+| 21:10 | 429 | 1 |
+| 21:15 | 429 | 1 |
+| 21:20 | 429 | 1 |
+| 21:25 | 429 | 1 |
+| 21:30 | 429 | 1 |
+| 21:35 | 429 | 1 |
+
+周期性 5min 一发 429, NVCF 侧 dsv4p 限流模式, 非 cc2 链路问题.
+
+## 健康验证 (05:37 CST)
 | 验证项 | 结果 |
 |--------|------|
 | nv_gw `/health` | status=ok, nv_default_model=glm5_2_nv, nv_num_keys=5, pexec=[kimi_nv,dsv4p_nv,glm5_2_nv] ✓ |
@@ -57,12 +64,12 @@ per-key: key2=4×200, key3=2×502, key?=5×429.
 | 轮次 | cc2 SR | 错误 | 趋势 |
 |------|--------|------|------|
 | post17 | 1/1=100% | 0 | ✅ glm5_2_nv 健康, 满分 |
-| post18-post82 | 0 req | 0 | — (无流量, 链路健康) |
-| post83 | 0 req | 0 | — (无流量, 链路健康) |
+| post18-post83 | 0 req | 0 | — (无流量, 链路健康) |
+| post84 | 0 req | 0 | — (无流量, 链路健康) |
 
 ## 下一步
 - 继续 NOP 巡检. 等 cc2 有流量时再判 SR.
-- dsv4p_nv 低 SR (36.4%) 是 NVCF 侧 dsv4p 限流 (周期性 429 + 5key 全挂), 非 cc2 链路 (cc2 走 glm5_2_nv), 不在本轮优化范围.
+- dsv4p_nv 低 SR (0%) 是 NVCF 侧 dsv4p 限流 (周期性 429 + 5key 全挂), 非 cc2 链路 (cc2 走 glm5_2_nv), 不在本轮优化范围.
 
 ## 参数快照 (2026-08-02 05:33 CST 实测注入)
 | 参数 | 值 |
