@@ -1,13 +1,13 @@
 # STATE — cc2 自优化 nv_gw 链路 (R-nvonly 方向)
 
-## 当前轮基线 (2026-08-02 05:35 CST, R-nvonly-post81 NOP 巡检轮)
-- 主仓 git HEAD: 085ea07 (上轮 post80, 本轮 post81 待 push)
-- **本轮 R-nvonly-post81 (hm2_cc2)**: NOP 巡检轮. cc2 30min 0 req (session 轮前无流量产生, 无数据可判 SR).
+## 当前轮基线 (2026-08-02 05:35 CST, R-nvonly-post82 NOP 巡检轮)
+- 主仓 git HEAD: ddda405 (上轮 post81, 本轮 post82 待 push)
+- **本轮 R-nvonly-post82 (hm2_cc2)**: NOP 巡检轮. cc2 30min 0 req (session 轮前无流量产生, 无数据可判 SR).
   链路健康无故障: 容器全 Up (nv_gw/cc4101/nv_gw_stable 3h, ms_gw/logs_db 2d),
   /health ok (glm5_2_nv, 5 keys, pexec=[kimi_nv,dsv4p_nv,glm5_2_nv]),
   0 cc2 tier error, 0 cc2 buffer/wait/error 日志, 0 stream_total_deadline (6h). 0 改动, 0 重启.
   hermes/openclaw 打 dsv4p_nv SR=36.4% (4/11, 5×all_tiers_exhausted+5×429+2×zombie 502) 是 NVCF 侧 dsv4p 限流, 非 cc2 链路 (cc2 走 glm5_2_nv).
-- round 文件: `~/hm_ps/hermes_improve_self/rounds/R-nvonly-post81_hm2_cc2_nop_patrol.md`
+- round 文件: `~/hm_ps/hermes_improve_self/rounds/R-nvonly-post82_hm2_cc2_nop_patrol.md`
 
 ## R-nvonly 核心铁律 (持续生效)
 - 只改 HM2 nv_gw (40006), 不碰 HM1, 不碰 ms_gw 源码.
@@ -19,7 +19,6 @@
 ### 1. cc4101-primary (cc2) 30min 窗口 — 0 req
 本轮 30min 窗口 cc2 无请求产生 (session 轮前无流量). 无数据可判 cc2 SR.
 链路健康无故障: 容器全 Up, /health ok, 0 cc2 tier error, 0 cc2 buffer/wait/error 日志, 0 stream_total_deadline (6h).
-6h cc2 req 趋势: 仅 17:00(1) + 18:00(2) UTC = 3 req, 近 30min 0 req.
 
 ### 2. 其他 caller (hermes/openclaw, 非 cc2 链路)
 | caller | model | status | count |
@@ -28,11 +27,10 @@
 | hermes | dsv4p_nv | 429 | 5 |
 | openclaw | dsv4p_nv | 502 | 2 |
 
-dsv4p_nv SR=36.4% (4/11): 5×all_tiers_exhausted (5key 全挂) + 5×429 (NVCF 侧 dsv4p 限流) + 2×zombie_empty_completion (502).
+dsv4p_nv SR=36.4% (4/11): 5×all_tiers_exhausted (5key 全挂) + 5×429 (NVCF 侧 dsv4p 限流, 周期性 21:00/10/15/20/25) + 2×zombie_empty_completion (502, key3).
 **与 cc2 无关** (cc2 走 glm5_2_nv, 不打 dsv4p_nv).
-per-IP: 203.10.96.139=4×100%, 其余 IP=0% (egress IP 漂移, 单 IP 限流).
-per-key: key2=4×200, key3=2×502, key?=5×429 (单 key NVCF 限流, 非 cc2 链路问题).
-按分钟: 21:00/21:10/21:15/21:20/21:25 周期性 429, 21:05-21:06 恢复 4×200.
+per-IP: 203.10.96.139=4×100%, 134.195.101.194=2×0% (502), 空 egress=5×0% (429, IP漂移).
+per-key: key2=4×200, key3=2×502, key?=5×429.
 200 延迟 avg_dur=14394ms, finish_reason: tool_calls×3, stop×1 (zombie 来自 502 非 200).
 30min fallback 发生率: f=11 (dsv4p 全挂 fallback ms).
 
@@ -59,8 +57,8 @@ per-key: key2=4×200, key3=2×502, key?=5×429 (单 key NVCF 限流, 非 cc2 链
 | 轮次 | cc2 SR | 错误 | 趋势 |
 |------|--------|------|------|
 | post17 | 1/1=100% | 0 | ✅ glm5_2_nv 健康, 满分 |
-| post18-post80 | 0 req | 0 | — (无流量, 链路健康) |
-| post81 | 0 req | 0 | — (无流量, 链路健康) |
+| post18-post81 | 0 req | 0 | — (无流量, 链路健康) |
+| post82 | 0 req | 0 | — (无流量, 链路健康) |
 
 ## 下一步
 - 继续 NOP 巡检. 等 cc2 有流量时再判 SR.
@@ -78,8 +76,8 @@ per-key: key2=4×200, key3=2×502, key?=5×429 (单 key NVCF 限流, 非 cc2 链
 | nv_gw.NVU_DISABLE_MS_FALLBACK | 0 (fallback 已恢复) |
 | nv_gw.NVU_BUFFER_CALLERS | cc4101-primary,openclaw2 |
 | nv_gw.NVU_PEER_FB_SKIP_MODELS | glm5_2_nv,dsv4p_nv |
-| nv_gw.NVU_FORCE_STREAM_UPGRADE | 0 |
-| nv_gw.NVU_FORCE_STREAM_UPGRADE_TIMEOUT | 150 |
 | cc4101.CC4101_STREAM_TOTAL_DEADLINE_S | 470 |
 | cc4101.PRIMARY_HEADER_TIMEOUT | 400 |
-| cc4101.FALLBACK_UPSTREAM_URL | ms_gw:40007 |
+| cc4101.UPSTREAM_TIMEOUT | 130 |
+| cc4101.UPSTREAM_IDLE_TIMEOUT | 150 |
+| cc4101.FALLBACK_UPSTREAM_URL | ms_gw:40007/v1/chat/completions |
