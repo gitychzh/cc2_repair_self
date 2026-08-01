@@ -1,14 +1,14 @@
 # STATE — cc2 自优化 nv_gw 链路 (R-nvonly 方向)
 
-## 当前轮基线 (2026-08-02 05:11 CST, R-nvonly-post75 NOP 巡检轮)
-- 主仓 git HEAD: ef2b13a→本轮 post75 (f4607e5 已 push)
+## 当前轮基线 (2026-08-02 05:14 CST, R-nvonly-post76 NOP 巡检轮)
+- 主仓 git HEAD: f4607e5→本轮 post76 (0efcf74 已 push)
 - 本仓 git HEAD: 待 commit (cc2_repair_self master)
-- **本轮 R-nvonly-post75 (hm2_cc2)**: NOP 巡检轮. cc2 30min 0 req (session 轮前无流量产生, 无数据可判 SR).
+- **本轮 R-nvonly-post76 (hm2_cc2)**: NOP 巡检轮. cc2 30min 0 req (session 轮前无流量产生, 无数据可判 SR).
   链路健康无故障: 容器全 Up (nv_gw/cc4101/nv_gw_stable 3h),
   /health ok (glm5_2_nv, 5 keys, pexec=[kimi_nv,dsv4p_nv,glm5_2_nv]),
   0 cc2 tier error, 0 cc2 buffer/wait/error 日志, 0 stream_total_deadline (6h). 0 改动, 0 重启.
   hermes/openclaw 打 dsv4p_nv SR=53.8% (7/13, 4×all_tiers_exhausted+4×429+2×zombie 502) 是 NVCF 侧 dsv4p 限流, 非 cc2 链路 (cc2 走 glm5_2_nv).
-- round 文件: `~/hm_ps/hermes_improve_self/rounds/R-nvonly-post75_hm2_cc2_nop_patrol.md`
+- round 文件: `~/hm_ps/hermes_improve_self/rounds/R-nvonly-post76_hm2_cc2_nop_patrol.md`
 
 ## R-nvonly 核心铁律 (持续生效)
 - 只改 HM2 nv_gw (40006), 不碰 HM1, 不碰 ms_gw 源码.
@@ -35,7 +35,7 @@ per-key: key2=7×200, key3=2×502, key?=4×429 (单 key 限流, 非 cc2 链路�
 按分钟: 20:40~21:00 间歇 4×429 周期性限流, 20:55/21:05~21:06 恢复 7×200.
 200 延迟 avg_dur=12873ms (dsv4p 正常水位), finish_reason: tool_calls×5, stop×2 (zombie 来自 502 非 200).
 
-### 3. 健康验证 (05:11 CST)
+### 3. 健康验证 (05:14 CST)
 | 验证项 | 结果 |
 |--------|------|
 | nv_gw `/health` | status=ok, nv_default_model=glm5_2_nv, nv_num_keys=5, pexec=[kimi_nv,dsv4p_nv,glm5_2_nv] ✓ |
@@ -58,10 +58,10 @@ per-key: key2=7×200, key3=2×502, key?=4×429 (单 key 限流, 非 cc2 链路�
 | 轮次 | cc2 SR | 错误 | 趋势 |
 |------|--------|------|------|
 | post17 | 1/1=100% | 0 | ✅ glm5_2_nv 健康, 满分 |
-| post18-post74 | 0 req | 0 | — (无流量, 链路健康) |
-| post75 | 0 req | 0 | — (无流量, 链路健康) |
+| post18-post75 | 0 req | 0 | — (无流量, 链路健康) |
+| post76 | 0 req | 0 | — (无流量, 链路健康) |
 
-## 参数快照 (2026-08-02 05:11 实测注入)
+## 参数快照 (2026-08-02 05:14 实测注入)
 | 参数 | 值 |
 |------|-----|
 | nv_gw.UPSTREAM_TIMEOUT | 90 |
@@ -69,7 +69,7 @@ per-key: key2=7×200, key3=2×502, key?=4×429 (单 key 限流, 非 cc2 链路�
 | nv_gw.KEY_COOLDOWN_S | 30 |
 | nv_gw.NV_INTEGRATE_KEY_COOLDOWN_S | 90 |
 | nv_gw.MIN_OUTBOUND_INTERVAL_S | 10 |
-| nv_gw.NVU_DISABLE_MS_FALLBACK | 0 (fallback 已恢复) |
+| nv_gw.NVU_DISABLE_MS_FALLBACK | 0 (fallback 已��复) |
 | nv_gw.NVU_BUFFER_CALLERS | cc4101-primary,openclaw2 |
 | nv_gw.NVU_PEER_FB_SKIP_MODELS | glm5_2_nv,dsv4p_nv |
 | nv_gw.NVU_FORCE_STREAM_UPGRADE | 0 |
@@ -78,6 +78,3 @@ per-key: key2=7×200, key3=2×502, key?=4×429 (单 key 限流, 非 cc2 链路�
 | cc4101.UPSTREAM_TIMEOUT | 130 |
 | cc4101.UPSTREAM_IDLE_TIMEOUT | 150 |
 | cc4101.FALLBACK_UPSTREAM_URL | ms_gw:40007 |
-
-## 下一步
-继续巡检. cc2 走 glm5_2_nv, dsv4p_nv 限流是 hermes/openclaw caller 的 NVCF 侧问题, 非 cc2 链路.
