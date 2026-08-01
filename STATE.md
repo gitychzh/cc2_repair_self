@@ -1,12 +1,12 @@
 # STATE — cc2 自优化 nv_gw 链路 (R-nvonly 方向)
 
-## 当前轮基线 (2026-08-02 03:13 CST, R-nvonly-post35 NOP 巡检轮)
-- 主仓 git HEAD: 7e25dfd (post34) → 本轮 post35 round 文件 (待 push)
-- **本轮 R-nvonly-post35 (hm2_cc2)**: NOP 巡检轮. cc2 30min 0 req (session 轮前无流量产生, 无数据可判 SR).
+## 当前轮基线 (2026-08-02 03:20 CST, R-nvonly-post36 NOP 巡检轮)
+- 主仓 git HEAD: b1a2c54 (post36, 已 push)
+- **本轮 R-nvonly-post36 (hm2_cc2)**: NOP 巡检轮. cc2 30min 0 req (session 轮前无流量产生, 无数据可判 SR).
   链路健康无故障: 容器全 Up, /health ok (glm5_2_nv, 5 keys), 无 buffer/wait/error 日志.
-  0 改动, 0 重启. post17~post27 连续满分记录保持 (11 连庄, post28-post35 均 0 req 不计入连庄也不打断).
+  0 改动, 0 重启. post17~post27 连续满分记录保持 (11 连庄, post28-post36 均 0 req 不计入连庄也不打断).
   hermes caller 打 dsv4p_nv SR=44.4% (4/9, 5×all_tiers_exhausted) 是 NVCF 侧 dsv4p 限流, 非 cc2 链路 (cc2 走 glm5_2_nv).
-- round 文件: `~/hm_ps/hermes_improve_self/rounds/R-nvonly-post35_hm2_cc2_nop_patrol.md`
+- round 文件: `~/hm_ps/hermes_improve_self/rounds/R-nvonly-post36_hm2_cc2_nop_patrol.md`
 
 ## R-nvonly 核心铁律 (持续生效, 按 prompt 当前指令)
 - 只改 HM2 nv_gw (40006), 不碰 HM1, 不碰 ms_gw 源码.
@@ -28,7 +28,7 @@
 
 dsv4p_nv SR=44.4% (4/9), top error: all_tiers_exhausted ×5 (5key 全挂, NVCF 侧限流).
 **与 cc2 无关** (cc2 走 glm5_2_nv, 不打 dsv4p_nv).
-按分钟趋势: 18:45-19:10 持续 429, 19:04-19:05 恢复 200 → NVCF 侧间歇限流后段自恢复.
+30min 趋势: 18:50-19:15 间歇 429, 19:04-19:05 恢复 200 → NVCF 侧间歇限流后段自恢复.
 
 ### 3. 健康验证
 | 验证项 | 结果 |
@@ -61,10 +61,10 @@ dsv4p_nv SR=44.4% (4/9), top error: all_tiers_exhausted ×5 (5key 全挂, NVCF �
 | post25 | 2/2=100% | 0 | ✅ 9 连庄 (含 1 次 ms_gw fallback 兜底) |
 | post26 | 1/1=100% | 0 | ✅ 10 连庄 (1 次 ms_gw fallback 兜底) |
 | post27 | 1/1=100% | 0 | ✅ 11 连庄 (1 次 ms_gw fallback 兜底) |
-| post28-post34 | 0 req | 0 | — (无流量, 链路健康, 不打断) |
-| **post35** | **0 req** | **0** | — (无流量, 链路健康, 不打断) |
+| post28-post35 | 0 req | 0 | — (无流量, 链路健康, 不打断) |
+| **post36** | **0 req** | **0** | — (无流量, 链路健康, 不打断) |
 
-## 参数快照 (实测 2026-08-02 03:12 注入)
+## 参数快照 (实测 2026-08-02 03:15 注入)
 - nv_gw: `NVU_DISABLE_MS_FALLBACK=0`, `NVU_BUFFER_MAX_RETRIES=5`, `TIER_TIMEOUT_BUDGET_S=180`, `UPSTREAM_TIMEOUT=90`, `NVU_PEER_FB_SKIP_MODELS=glm5_2_nv,dsv4p_nv`, `NVU_BUFFER_CALLERS=cc4101-primary,openclaw2`, `MIN_OUTBOUND_INTERVAL_S=10`, `TIER_COOLDOWN_S=180`, `KEY_COOLDOWN_S=30`, `NV_INTEGRATE_KEY_COOLDOWN_S=90`, `NVU_FORCE_STREAM_UPGRADE=0`, `NVU_FORCE_STREAM_UPGRADE_TIMEOUT=150`, `NVU_BUFFER_TIMEOUT_STAIRS=90,90,90,90,90`, `NVU_BUFFER_TOTAL_DEADLINE_S=450`, `NVU_CALLER_KEY_MAP=hermes:2;openclaw:3;opencode:4`
 - cc4101: `CC4101_STREAM_TOTAL_DEADLINE_S=470`, `FALLBACK_UPSTREAM=ms_gw:40007`, `FALLBACK_UPSTREAM_MODEL=glm5_2_ms`, `PRIMARY_UPSTREAM_MODEL=glm5_2_nv`, `PRIMARY_UPSTREAM=nv_gw:40006`, `PRIMARY_HEADER_TIMEOUT=400`, `UPSTREAM_TIMEOUT=130`, `CC4101_PRIMARY_FAIL_THRESHOLD=3`, `CC4101_PRIMARY_SKIP_S=30`, `UPSTREAM_IDLE_TIMEOUT=150`
 - settings.json: `contextWindow=170000`, `autoCompactWindow=155000`, `API_TIMEOUT_MS=600000`
