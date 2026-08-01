@@ -1,13 +1,13 @@
 # STATE — cc2 自优化 nv_gw 链路 (R-nvonly 方向)
 
-## 当前轮基线 (2026-08-02 06:40 CST, R-nvonly-post106 NOP 巡检轮)
-- 主仓 git HEAD: 9d02a74 (post105 已 push, post106 待 push)
-- **本轮 R-nvonly-post106 (hm2_cc2)**: NOP 巡检轮. cc2 30min 0 req (session 轮前无流量产生, 无数据可判 SR).
+## 当前轮基线 (2026-08-02 06:45 CST, R-nvonly-post107 NOP 巡检轮)
+- 主仓 git HEAD: a4f9f01 (post106 已 push, post107 待 push)
+- **本轮 R-nvonly-post107 (hm2_cc2)**: NOP 巡检轮. cc2 30min 0 req (session 轮前无流量产生, 无数据可判 SR).
   链路健康无故障: 容器全 Up (nv_gw/cc4101 5h, nv_gw_stable 5h, ms_gw/logs_db 2d),
   env 配置正确 (NVU_DISABLE_MS_FALLBACK=0 fallback 已恢复, buffer 5×90s=450s, cc4101 deadline 470s),
   0 cc2 tier error, 0 cc2 buffer/wait/error 日志. 0 改动, 0 重启.
-  hermes 打 dsv4p_nv SR=0.0% (0/6, 6×429+all_tiers_exhausted, 周期性 5min 一发) 是 NVCF 侧 dsv4p 限流, 非 cc2 链路 (cc2 走 glm5_2_nv).
-- round 文件: `~/hm_ps/hermes_improve_self/rounds/R-nvonly-post106_hm2_cc2_nop_patrol.md`
+  hermes 打 dsv4p_nv SR=37.5% (3/8, 3×200 + 5×429/all_tiers_exhausted, 周期性 5min 一发) 是 NVCF 侧 dsv4p 限流, 非 cc2 链路 (cc2 走 glm5_2_nv).
+- round 文件: `~/hm_ps/hermes_improve_self/rounds/R-nvonly-post107_hm2_cc2_nop_patrol.md`
 
 ## R-nvonly 核心铁律 (持续生效)
 - 只改 HM2 nv_gw (40006), 不碰 HM1, 不碰 ms_gw 源码.
@@ -25,26 +25,27 @@
 ### 2. 其他 caller (hermes, 非 cc2 链路)
 | caller | model | status | count |
 |--------|-------|--------|-------|
-| hermes | dsv4p_nv | 429 | 6 |
+| hermes | dsv4p_nv | 200 | 3 |
+| hermes | dsv4p_nv | 429 | 5 |
 
-dsv4p_nv SR=0.0% (0/6): 6×429 (all_tiers_exhausted, 5key 全挂), 周期性 5min 一发 429.
+dsv4p_nv SR=37.5% (3/8): 3×200 + 5×429 (all_tiers_exhausted, 5key 全挂), 周期性 5min 一发 429.
 **与 cc2 无关** (cc2 走 glm5_2_nv, 不打 dsv4p_nv).
-30min fallback 发生率: f=6 (dsv4p 全挂 fallback ms, ms_gw fallback 已恢复正常工作).
+30min fallback 发生率: f=8 (dsv4p 全挂 fallback ms, ms_gw fallback 已恢复正常工作).
 
 ### 3. dsv4p_nv 按分钟趋势 (周期性 429, UTC)
 | 分钟 (UTC) | status | count |
 |------|--------|-------|
-| 22:10 | 429 | 1 |
 | 22:15 | 429 | 1 |
 | 22:20 | 429 | 1 |
 | 22:25 | 429 | 1 |
 | 22:30 | 429 | 1 |
 | 22:35 | 429 | 1 |
+| 22:40 | 200 | 3 |
 
-周期性 5min 一发 429, NVCF 侧 dsv4p 限流模式, 非 cc2 链路问题.
-与 post105 对比: dsv4p_nv 持续 SR=0.0% (0/6), 仍局限 hermes+dsv4p, 未扩散到 glm5_2_nv (post100-post106 连续 7 轮无扩散).
+周期性 5min 一发 429 后 22:40 恢复 200×3, NVCF 侧 dsv4p 限流模式, 非 cc2 链路问题.
+与 post106 对比: dsv4p_nv 从 0.0% (0/6) 部分恢复到 37.5% (3/8), 仍局限 hermes+dsv4p, 未扩散到 glm5_2_nv (post100-post107 连续 8 轮无扩散).
 
-## 健康验证 (06:40 CST)
+## 健康验证 (06:45 CST)
 | 验证项 | 结果 |
 |--------|------|
 | nv_gw /health | ok, passthrough, 5 keys, default glm5_2_nv ✓ |
@@ -52,13 +53,13 @@ dsv4p_nv SR=0.0% (0/6): 6×429 (all_tiers_exhausted, 5key 全挂), 周期性 5mi
 | cc4101 env | STREAM_TOTAL_DEADLINE=470, PRIMARY_HEADER_TIMEOUT=400, FALLBACK=ms_gw:40007 ✓ |
 | docker ps | nv_gw/cc4101 Up 5h, nv_gw_stable Up 5h, ms_gw/logs_db Up 2d ✓ |
 | cc2 (cc4101-primary) 30min SR | 0 rows (无流量, 链路健康无故障) ✓ |
-| 30min 错误分类 | all_tiers_exhausted × 6 (全 hermes+dsv4p, 非 cc2) ✓ |
+| 30min 错误分类 | all_tiers_exhausted × 5 (全 hermes+dsv4p, 非 cc2) ✓ |
 | 30min tier error | 0 rows (无 cc2 流量) ✓ |
 | stream_total_deadline (6h) | 0 ✓ (上轮实测, 未变化) |
 | buffer/wait 日志 | 无 (cc2 0 req) ✓ |
 | 配置 | NVU_DISABLE_MS_FALLBACK=0 (fallback 已恢复), FALLBACK_UPSTREAM=ms_gw:40007 ✓ |
 
-## 参数快照 (2026-08-02 06:40 CST)
+## 参数快照 (2026-08-02 06:45 CST)
 - nv_gw: NVU_DISABLE_MS_FALLBACK=0, BUFFER_MAX_RETRIES=5, BUFFER_TIMEOUT_STAIRS=90,90,90,90,90, BUFFER_TOTAL_DEADLINE=450s, TIER_TIMEOUT_BUDGET=180s, UPSTREAM_TIMEOUT=90s
 - cc4101: CC4101_STREAM_TOTAL_DEADLINE_S=470, PRIMARY_HEADER_TIMEOUT=400, FALLBACK_UPSTREAM_URL=http://ms_gw:40007/v1/chat/completions
 - 链路: cc2→cc4101(4101)→nv_gw(40006, glm5_2_nv)→NVCF, fallback ms_gw(40007) 已恢复
