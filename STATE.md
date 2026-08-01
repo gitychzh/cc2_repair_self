@@ -1,12 +1,12 @@
 # STATE — cc2 自优化 nv_gw 链路 (R-nvonly 方向)
 
-## 当前轮基线 (2026-08-02 03:01 CST, R-nvonly-post30 NOP 巡检轮)
-- 主仓 git HEAD: 0a89eef (post29 已 push, post30 即将 push)
-- **本轮 R-nvonly-post30 (hm2_cc2)**: NOP 巡检轮. cc2 30min 0 req (session 轮前无流量产生, 无数据可判 SR).
+## 当前轮基线 (2026-08-02 03:03 CST, R-nvonly-post31 NOP 巡检轮)
+- 主仓 git HEAD: f11bb63 (post30 已 push, post31 即将 push)
+- **本轮 R-nvonly-post31 (hm2_cc2)**: NOP 巡检轮. cc2 30min 0 req (session 轮前无流量产生, 无数据可判 SR).
   链路健康无故障: 容器全 Up, /health ok (glm5_2_nv, 5 keys), 无 buffer/wait/error 日志.
-  0 改动, 0 重启. post17~post27 连续满分记录保持 (11 连庄, post28/post29/post30 均 0 req 不计入连庄也不打断).
+  0 改动, 0 重启. post17~post27 连续满分记录保持 (11 连庄, post28-post31 均 0 req 不计入连庄也不打断).
   hermes caller 打 dsv4p_nv SR=0% (0/6, 6×all_tiers_exhausted) 是 NVCF 侧限流, 非 cc2 链路.
-- round 文件: `~/hm_ps/hermes_improve_self/rounds/R-nvonly-post30_hm2_cc2_nop_patrol.md`
+- round 文件: `~/hm_ps/hermes_improve_self/rounds/R-nvonly-post31_hm2_cc2_nop_patrol.md`
 
 ## R-nvonly 核心铁律 (持续生效, 按 prompt 当前指令)
 - 只改 HM2 nv_gw (40006), 不碰 HM1, 不碰 ms_gw 源码.
@@ -63,8 +63,8 @@ dsv4p_nv SR=0% (0/6), top error: all_tiers_exhausted ×6 (5key 全挂, NVCF 侧�
 | post26 | 1/1=100% | 0 | ✅ 10 连庄 (1 次 ms_gw fallback 兜底) |
 | post27 | 1/1=100% | 0 | ✅ 11 连庄 (1 次 ms_gw fallback 兜底) |
 | post28 | 0 req | 0 | — (无流量, 链路健康, 不打断) |
-| post29 | 0 req | 0 | — (无流量, 链路健康, 不打断) |
-| **post30** | **0 req** | **0** | — (无流量, 链路健康, 不打断) |
+| post28-post30 | 0 req | 0 | — (无流量, 链路健康, 不打断) |
+| **post31** | **0 req** | **0** | — (无流量, 链路健康, 不打断) |
 
 ## 参数快照 (实测 2026-08-02 02:59 注入)
 - nv_gw: `NVU_DISABLE_MS_FALLBACK=0`, `NVU_BUFFER_MAX_RETRIES=5`, `TIER_TIMEOUT_BUDGET_S=180`, `UPSTREAM_TIMEOUT=90`, `NVU_PEER_FB_SKIP_MODELS=glm5_2_nv,dsv4p_nv`, `NVU_BUFFER_CALLERS=cc4101-primary,openclaw2`, `MIN_OUTBOUND_INTERVAL_S=10`, `TIER_COOLDOWN_S=180`, `KEY_COOLDOWN_S=30`, `NV_INTEGRATE_KEY_COOLDOWN_S=90`, `NVU_FORCE_STREAM_UPGRADE=0`, `NVU_FORCE_STREAM_UPGRADE_TIMEOUT=150`, `NVU_BUFFER_TIMEOUT_STAIRS=90,90,90,90,90`, `NVU_BUFFER_TOTAL_DEADLINE_S=450`, `NVU_CALLER_KEY_MAP=hermes:2;openclaw:3;opencode:4`
