@@ -1,12 +1,12 @@
 # STATE — cc2 自优化 nv_gw 链路 (R-nvonly 方向)
 
-## 当前轮基线 (2026-08-02 03:50 CST, R-nvonly-post43 NOP 巡检轮)
-- 主仓 git HEAD: d9821ae (post43 round 已 commit+push)
-- **本轮 R-nvonly-post43 (hm2_cc2)**: NOP 巡检轮. cc2 30min 0 req (session 轮前无流量产生, 无数据可判 SR).
+## 当前轮基线 (2026-08-02 03:55 CST, R-nvonly-post44 NOP 巡检轮)
+- 主仓 git HEAD: d9821ae (post43 round 已 commit+push, post44 round 待 commit)
+- **本轮 R-nvonly-post44 (hm2_cc2)**: NOP 巡检轮. cc2 30min 0 req (session 轮前无流量产生, 无数据可判 SR).
   链路健康无故障: 容器全 Up, /health ok (glm5_2_nv, 5 keys), 0 tier error, 0 buffer/wait/error 日志.
-  0 改动, 0 重启. post17~post27 连续满分记录保持 (11 连庄, post28-post43 均 0 req 不计入连庄也不打断).
+  0 改动, 0 重启. post17~post27 连续满分记录保持 (11 连庄, post28-post44 均 0 req 不计入连庄也不打断).
   hermes caller 打 dsv4p_nv SR=0% (0/6, 6×all_tiers_exhausted) 是 NVCF 侧 dsv4p 限流, 非 cc2 链路 (cc2 走 glm5_2_nv).
-- round 文件: `~/hm_ps/hermes_improve_self/rounds/R-nvonly-post43_hm2_cc2_nop_patrol.md`
+- round 文件: `~/hm_ps/hermes_improve_self/rounds/R-nvonly-post44_hm2_cc2_nop_patrol.md`
 
 ## R-nvonly 核心铁律 (持续生效, 按 prompt 当前指令)
 - 只改 HM2 nv_gw (40006), 不碰 HM1, 不碰 ms_gw 源码.
@@ -61,7 +61,8 @@ dsv4p_nv SR=0% (0/6), top error: all_tiers_exhausted ×6 (5key 全挂, NVCF 侧�
 | post26 | 1/1=100% | 0 | ✅ 10 连庄 (1 次 ms_gw fallback 兜底) |
 | post27 | 1/1=100% | 0 | ✅ 11 连庄 (1 次 ms_gw fallback 兜底) |
 | post28-post42 | 0 req | 0 | — (无流量, 链路健康, 不打断) |
-| **post43** | **0 req** | **0** | — (无流量, 链路健康, 不打断) |
+| post43 | 0 req | 0 | — (无流量, 链路健康, 不打断) |
+| **post44** | **0 req** | **0** | — (无流量, 链路健康, 不打断) |
 
 ## 参数快照 (实测 2026-08-02 03:36 注入)
 - nv_gw: `NVU_DISABLE_MS_FALLBACK=0`, `NVU_BUFFER_MAX_RETRIES=5`, `TIER_TIMEOUT_BUDGET_S=180`, `UPSTREAM_TIMEOUT=90`, `NVU_PEER_FB_SKIP_MODELS=glm5_2_nv,dsv4p_nv`, `NVU_BUFFER_CALLERS=cc4101-primary,openclaw2`, `MIN_OUTBOUND_INTERVAL_S=10`, `TIER_COOLDOWN_S=180`, `KEY_COOLDOWN_S=30`, `NV_INTEGRATE_KEY_COOLDOWN_S=90`, `NVU_FORCE_STREAM_UPGRADE=0`, `NVU_FORCE_STREAM_UPGRADE_TIMEOUT=150`, `NVU_BUFFER_TIMEOUT_STAIRS=90,90,90,90,90`, `NVU_BUFFER_TOTAL_DEADLINE_S=450`, `NVU_CALLER_KEY_MAP=hermes:2;openclaw:3;opencode:4`
