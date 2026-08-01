@@ -1,13 +1,14 @@
 # STATE — cc2 自优化 nv_gw 链路 (R-nvonly 方向)
 
-## 当前轮基线 (2026-08-02 04:47 CST, R-nvonly-post67 NOP 巡检轮)
-- 主仓 git HEAD: 待 commit (post67 round 文件)
+## 当前轮基线 (2026-08-02 04:49 CST, R-nvonly-post68 NOP 巡检轮)
+- 主仓 git HEAD: 待 commit (post68 round 文件)
 - 本仓 git HEAD: 待 commit (cc2_repair_self master)
-- **本轮 R-nvonly-post67 (hm2_cc2)**: NOP 巡检轮. cc2 30min 0 req (session 轮前无流量产生, 无数据可判 SR).
-  链路健康无故障: 容器全 Up, /health ok (glm5_2_nv, 5 keys), 0 cc2 tier error, 0 cc2 buffer/wait/error 日志.
-  0 改动, 0 重启. post17~post27 连续满分记录保持 (11 连庄, post28-post67 均 0 req 不计入连庄也不打断).
+- **本轮 R-nvonly-post68 (hm2_cc2)**: NOP 巡检轮. cc2 30min 0 req (session 轮前无流量产生, 无数据可判 SR).
+  链路健康无故障: 容器全 Up (nv_gw/cc4101 3h, ms_gw/logs_db 2d), /health ok (glm5_2_nv, 5 keys),
+  0 cc2 tier error, 0 cc2 buffer/wait/error 日志. 0 改动, 0 重启.
+  post17~post27 连续满分记录保持 (11 连庄, post28-post68 均 0 req 不计入连庄也不打断).
   hermes 打 dsv4p_nv SR=66.7% (10/15, 5×all_tiers_exhausted) 是 NVCF 侧 dsv4p 限流, 非 cc2 链路 (cc2 走 glm5_2_nv).
-- round 文件: `~/hm_ps/hermes_improve_self/rounds/R-nvonly-post67_hm2_cc2_nop_patrol.md`
+- round 文件: `~/hm_ps/hermes_improve_self/rounds/R-nvonly-post68_hm2_cc2_nop_patrol.md`
 
 ## R-nvonly 核心铁律 (持续生效)
 - 只改 HM2 nv_gw (40006), 不碰 HM1, 不碰 ms_gw 源码.
@@ -28,10 +29,10 @@
 
 hermes 打 dsv4p_nv SR=66.7% (10/15), 5×429 + 5×all_tiers_exhausted (5key 全挂, NVCF 侧限流).
 **与 cc2 无关** (cc2 走 glm5_2_nv, 不打 dsv4p_nv).
-按分钟趋势: 20:15~20:30 每 5min 1×429 稳定限流, 20:30~20:36 恢复 10×200 (NVCF 侧 dsv4p 周期性限流, 非 cc2).
+按分钟趋势: 20:20~20:30 每 5min 1×429 稳定限流, 20:30~20:36 恢复 10×200 (NVCF 侧 dsv4p 周期性限流, 非 cc2).
 per-IP: 203.10.96.139=10×100%, 其余 5×0% (egress IP 漂移, 单 IP 限流, 非 cc2).
 
-### 3. 健康验证 (04:47 CST)
+### 3. 健康验证 (04:49 CST)
 | 验证项 | 结果 |
 |--------|------|
 | nv_gw `/health` | status=ok, nv_default_model=glm5_2_nv, nv_num_keys=5, pexec=[kimi_nv,dsv4p_nv,glm5_2_nv] ✓ |
@@ -53,10 +54,10 @@ per-IP: 203.10.96.139=10×100%, 其余 5×0% (egress IP 漂移, 单 IP 限流, �
 |------|--------|------|------|
 | post17 | 1/1=100% | 0 | ✅ glm5_2_nv 健康, 满分 |
 | post18-post27 | 100% | 0 | ✅ 11 连庄 (含多次 ms_gw fallback 兜底) |
-| post28-post66 | 0 req | 0 | — (无流量, 不打断) |
-| **post67** | **0 req** | **0** | — (无流量, 链路健康, 不打断) |
+| post28-post67 | 0 req | 0 | — (无流量, 不打断) |
+| **post68** | **0 req** | **0** | — (无流量, 链路健康, 不打断) |
 
-## 参数快照 (实测 2026-08-02 04:46 注入)
+## 参数快照 (实测 2026-08-02 04:49 注入)
 - nv_gw: `NVU_DISABLE_MS_FALLBACK=0`, `NVU_BUFFER_MAX_RETRIES=5`, `TIER_TIMEOUT_BUDGET_S=180`, `UPSTREAM_TIMEOUT=90`, `NVU_PEER_FB_SKIP_MODELS=glm5_2_nv,dsv4p_nv`, `NVU_BUFFER_CALLERS=cc4101-primary,openclaw2`, `MIN_OUTBOUND_INTERVAL_S=10`, `TIER_COOLDOWN_S=180`, `KEY_COOLDOWN_S=30`, `NV_INTEGRATE_KEY_COOLDOWN_S=90`, `NVU_FORCE_STREAM_UPGRADE=0`, `NVU_FORCE_STREAM_UPGRADE_TIMEOUT=150`, `NVU_BUFFER_TIMEOUT_STAIRS=90,90,90,90,90`, `NVU_BUFFER_TOTAL_DEADLINE_S=450`, `NVU_CALLER_KEY_MAP=hermes:2;openclaw:3;opencode:4`
 - cc4101: `CC4101_STREAM_TOTAL_DEADLINE_S=470`, `FALLBACK_UPSTREAM=ms_gw:40007`, `FALLBACK_UPSTREAM_MODEL=glm5_2_ms`, `PRIMARY_UPSTREAM_MODEL=glm5_2_nv`, `PRIMARY_UPSTREAM=nv_gw:40006`, `PRIMARY_HEADER_TIMEOUT=400`, `UPSTREAM_TIMEOUT=130`, `CC4101_PRIMARY_FAIL_THRESHOLD=3`, `CC4101_PRIMARY_SKIP_S=30`, `UPSTREAM_IDLE_TIMEOUT=150`
 - settings.json: `contextWindow=170000`, `autoCompactWindow=155000`, `API_TIMEOUT_MS=600000`
