@@ -1,14 +1,14 @@
 # STATE — cc2 自优化 nv_gw 链路 (R-nvonly 方向)
 
-## 当前轮基线 (2026-08-02 05:10 CST, R-nvonly-post74 NOP 巡检轮)
-- 主仓 git HEAD: 1eca9c5→本轮 post74 (ef2b13a 已 push)
+## 当前轮基线 (2026-08-02 05:11 CST, R-nvonly-post75 NOP 巡检轮)
+- 主仓 git HEAD: ef2b13a→本轮 post75 (f4607e5 已 push)
 - 本仓 git HEAD: 待 commit (cc2_repair_self master)
-- **本轮 R-nvonly-post74 (hm2_cc2)**: NOP 巡检轮. cc2 30min 0 req (session 轮前无流量产生, 无数据可判 SR).
+- **本轮 R-nvonly-post75 (hm2_cc2)**: NOP 巡检轮. cc2 30min 0 req (session 轮前无流量产生, 无数据可判 SR).
   链路健康无故障: 容器全 Up (nv_gw/cc4101/nv_gw_stable 3h),
   /health ok (glm5_2_nv, 5 keys, pexec=[kimi_nv,dsv4p_nv,glm5_2_nv]),
   0 cc2 tier error, 0 cc2 buffer/wait/error 日志, 0 stream_total_deadline (6h). 0 改动, 0 重启.
-  hermes 打 dsv4p_nv SR=53.3% (8/15, 5×all_tiers_exhausted+5×429, 2×zombie) 是 NVCF 侧 dsv4p 限流, 非 cc2 链路 (cc2 走 glm5_2_nv).
-- round 文件: `~/hm_ps/hermes_improve_self/rounds/R-nvonly-post74_hm2_cc2_nop_patrol.md`
+  hermes/openclaw 打 dsv4p_nv SR=53.8% (7/13, 4×all_tiers_exhausted+4×429+2×zombie 502) 是 NVCF 侧 dsv4p 限流, 非 cc2 链路 (cc2 走 glm5_2_nv).
+- round 文件: `~/hm_ps/hermes_improve_self/rounds/R-nvonly-post75_hm2_cc2_nop_patrol.md`
 
 ## R-nvonly 核心铁律 (持续生效)
 - 只改 HM2 nv_gw (40006), 不碰 HM1, 不碰 ms_gw 源码.
@@ -24,18 +24,18 @@
 ### 2. 其他 caller (hermes/openclaw, 非 cc2 链路)
 | caller | model | status | count |
 |--------|-------|--------|-------|
-| hermes | dsv4p_nv | 200 | 8 |
-| hermes | dsv4p_nv | 429 | 5 |
+| hermes | dsv4p_nv | 200 | 7 |
+| hermes | dsv4p_nv | 429 | 4 |
 | openclaw | dsv4p_nv | 502 | 2 |
 
-dsv4p_nv SR=53.3% (8/15): 5×all_tiers_exhausted + 5×429 (NVCF 侧 dsv4p 限流, 5key 全挂) + 2×zombie_empty_completion (502).
+dsv4p_nv SR=53.8% (7/13): 4×all_tiers_exhausted (5key 全挂) + 4×429 (NVCF 侧 dsv4p 限流) + 2×zombie_empty_completion (502).
 **与 cc2 无关** (cc2 走 glm5_2_nv, 不打 dsv4p_nv).
-per-IP: 203.10.96.139=8×100%, 其余 IP=0% (egress IP 漂移, 单 IP 限流).
-per-key: key2=8×200, key3=2×502, key?=5×429 (单 key 限流, 非 cc2 链路问题).
-按分钟: 20:36~21:00 间歇 5×429 周期性限流, 20:55/21:05~21:06 恢复 8×200.
-200 延迟 avg_dur=14835ms (dsv4p 正常水位), finish_reason: tool_calls×6, stop×2 (zombie 来自 502 非 200).
+per-IP: 203.10.96.139=7×100%, 其余 IP=0% (egress IP 漂移, 单 IP 限流).
+per-key: key2=7×200, key3=2×502, key?=4×429 (单 key 限流, 非 cc2 链路问题).
+按分钟: 20:40~21:00 间歇 4×429 周期性限流, 20:55/21:05~21:06 恢复 7×200.
+200 延迟 avg_dur=12873ms (dsv4p 正常水位), finish_reason: tool_calls×5, stop×2 (zombie 来自 502 非 200).
 
-### 3. 健康验证 (05:10 CST)
+### 3. 健康验证 (05:11 CST)
 | 验证项 | 结果 |
 |--------|------|
 | nv_gw `/health` | status=ok, nv_default_model=glm5_2_nv, nv_num_keys=5, pexec=[kimi_nv,dsv4p_nv,glm5_2_nv] ✓ |
@@ -58,10 +58,10 @@ per-key: key2=8×200, key3=2×502, key?=5×429 (单 key 限流, 非 cc2 链路�
 | 轮次 | cc2 SR | 错误 | 趋势 |
 |------|--------|------|------|
 | post17 | 1/1=100% | 0 | ✅ glm5_2_nv 健康, 满分 |
-| post18-post73 | 0 req | 0 | — (无流量, 链路健康) |
-| post74 | 0 req | 0 | — (无流量, 链路健康) |
+| post18-post74 | 0 req | 0 | — (无流量, 链路健康) |
+| post75 | 0 req | 0 | — (无流量, 链路健康) |
 
-## 参数快照 (2026-08-02 05:10 实测注入)
+## 参数快照 (2026-08-02 05:11 实测注入)
 | 参数 | 值 |
 |------|-----|
 | nv_gw.UPSTREAM_TIMEOUT | 90 |
@@ -78,9 +78,6 @@ per-key: key2=8×200, key3=2×502, key?=5×429 (单 key 限流, 非 cc2 链路�
 | cc4101.UPSTREAM_TIMEOUT | 130 |
 | cc4101.UPSTREAM_IDLE_TIMEOUT | 150 |
 | cc4101.FALLBACK_UPSTREAM_URL | ms_gw:40007 |
-| cc4101.PRIMARY_UPSTREAM_MODEL | glm5_2_nv |
-| settings.json API_TIMEOUT_MS | 600000 |
 
 ## 下一步
-- 继续 NOP 巡检. 等 cc2 自身请求产生流量后再判 SR.
-- dsv4p_nv 限流 (hermes caller) 非 cc2 范围, 持续观察是否扩散; cc2 走 glm5_2_nv 不受影响.
+继续巡检. cc2 走 glm5_2_nv, dsv4p_nv 限流是 hermes/openclaw caller 的 NVCF 侧问题, 非 cc2 链路.
