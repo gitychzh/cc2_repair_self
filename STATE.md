@@ -1,13 +1,13 @@
 # STATE — cc2 自优化 nv_gw 链路 (R-nvonly 方向)
 
-## 当前轮基线 (2026-08-02 06:37 CST, R-nvonly-post105 NOP 巡检轮)
-- 主仓 git HEAD: 9d02a74 (post105 已 push)
-- **本轮 R-nvonly-post105 (hm2_cc2)**: NOP 巡检轮. cc2 30min 0 req (session 轮前无流量产生, 无数据可判 SR).
+## 当前轮基线 (2026-08-02 06:40 CST, R-nvonly-post106 NOP 巡检轮)
+- 主仓 git HEAD: 9d02a74 (post105 已 push, post106 待 push)
+- **本轮 R-nvonly-post106 (hm2_cc2)**: NOP 巡检轮. cc2 30min 0 req (session 轮前无流量产生, 无数据可判 SR).
   链路健康无故障: 容器全 Up (nv_gw/cc4101 5h, nv_gw_stable 5h, ms_gw/logs_db 2d),
   env 配置正确 (NVU_DISABLE_MS_FALLBACK=0 fallback 已恢复, buffer 5×90s=450s, cc4101 deadline 470s),
   0 cc2 tier error, 0 cc2 buffer/wait/error 日志. 0 改动, 0 重启.
   hermes 打 dsv4p_nv SR=0.0% (0/6, 6×429+all_tiers_exhausted, 周期性 5min 一发) 是 NVCF 侧 dsv4p 限流, 非 cc2 链路 (cc2 走 glm5_2_nv).
-- round 文件: `~/hm_ps/hermes_improve_self/rounds/R-nvonly-post105_hm2_cc2_nop_patrol.md`
+- round 文件: `~/hm_ps/hermes_improve_self/rounds/R-nvonly-post106_hm2_cc2_nop_patrol.md`
 
 ## R-nvonly 核心铁律 (持续生效)
 - 只改 HM2 nv_gw (40006), 不碰 HM1, 不碰 ms_gw 源码.
@@ -20,7 +20,7 @@
 本轮 30min 窗口 cc2 无请求产生 (session 轮前无流量). 无数据可判 cc2 SR.
 链路健康无故障: 容器全 Up, env 配置正确, 0 cc2 tier error, 0 cc2 buffer/wait/error 日志,
 0 stream_total_deadline (6h 窗口, 上轮实测未变化).
-注: 直接裸探 cc4101/nv_gw `/v1/messages` 入口返回 401 (caller token 鉴权), 本 session 工具调用本���经 cc4101→nv_gw 链路.
+注: 直接裸探 cc4101/nv_gw `/v1/messages` 入口返回 401 (caller token 鉴权), 本 session 工具调用本身经 cc4101→nv_gw 链路.
 
 ### 2. 其他 caller (hermes, 非 cc2 链路)
 | caller | model | status | count |
@@ -42,13 +42,13 @@ dsv4p_nv SR=0.0% (0/6): 6×429 (all_tiers_exhausted, 5key 全挂), 周期性 5mi
 | 22:35 | 429 | 1 |
 
 周期性 5min 一发 429, NVCF 侧 dsv4p 限流模式, 非 cc2 链路问题.
-与 post104 对比: dsv4p_nv 持续 SR=0.0% (0/6), 仍局限 hermes+dsv4p, 未扩散到 glm5_2_nv (post100-post105 连续 6 轮无扩散).
+与 post105 对比: dsv4p_nv 持续 SR=0.0% (0/6), 仍局限 hermes+dsv4p, 未扩散到 glm5_2_nv (post100-post106 连续 7 轮无扩散).
 
-## 健康验证 (06:37 CST)
+## 健康验证 (06:40 CST)
 | 验证项 | 结果 |
 |--------|------|
 | nv_gw /health | ok, passthrough, 5 keys, default glm5_2_nv ✓ |
-| nv_gw env | NVU_DISABLE_MS_FALLBACK=0, BUFFER 5×90s=450s, CALLERS=cc4101-primary,openclaw2 ✓ |
+| nv_gw env | NVU_DISABLE_MS_FALLBACK=0, BUFFER 5×90s=450s, MAX_RETRIES=5 ✓ |
 | cc4101 env | STREAM_TOTAL_DEADLINE=470, PRIMARY_HEADER_TIMEOUT=400, FALLBACK=ms_gw:40007 ✓ |
 | docker ps | nv_gw/cc4101 Up 5h, nv_gw_stable Up 5h, ms_gw/logs_db Up 2d ✓ |
 | cc2 (cc4101-primary) 30min SR | 0 rows (无流量, 链路健康无故障) ✓ |
@@ -58,54 +58,8 @@ dsv4p_nv SR=0.0% (0/6): 6×429 (all_tiers_exhausted, 5key 全挂), 周期性 5mi
 | buffer/wait 日志 | 无 (cc2 0 req) ✓ |
 | 配置 | NVU_DISABLE_MS_FALLBACK=0 (fallback 已恢复), FALLBACK_UPSTREAM=ms_gw:40007 ✓ |
 
-## 三阈值判稳
-| 阈值 | 30min 实测 | 判定 |
-|------|-----------|------|
-| cc2 (cc4101-primary) SR | 0 req (无流量) | — (无数据, 链路健康无故障) |
-| 新错误类型 | 0 cc2 tier error | ✅ |
-| transport 层 | 0 错误 (无 cc2 流量) | ✅ |
-| buffer 触发 | 无 (cc2 0 req) | ✅ |
-→ **NOP 巡检轮**, 不改码, 不重启.
-
-## cc2 SR 走势
-| 轮次 | cc2 SR | 错误 | 趋势 |
-|------|--------|------|------|
-| post17 | 1/1=100% | 0 | ✅ glm5_2_nv 健康, 满分 |
-| post18-post105 | 0 req | 0 | — (无流量, 链路健康) |
-
-## 下一步
-- 继续 NOP 巡检. 等 cc2 有流量时再判 SR.
-- dsv4p_nv 低 SR (0.0%) 是 NVCF 侧 dsv4p 限流 (周期性 429 + 5key 全挂), 非 cc2 链路 (cc2 走 glm5_2_nv), 不在本轮优化范围.
-- 关注 dsv4p_nv 周期性 429 是否扩散到 glm5_2_nv (post100-post105 连续 6 轮未扩散).
-
-## 参数快照 (2026-08-02 06:37 CST 实测, 未变化)
-| 参数 | 值 |
-|------|-----|
-| nv_gw.UPSTREAM_TIMEOUT | 90 |
-| nv_gw.TIER_COOLDOWN_S | 180 |
-| nv_gw.TIER_TIMEOUT_BUDGET_S | 180 |
-| nv_gw.KEY_COOLDOWN_S | 30 |
-| nv_gw.NV_INTEGRATE_KEY_COOLDOWN_S | 90 |
-| nv_gw.MIN_OUTBOUND_INTERVAL_S | 10 |
-| nv_gw.NVU_DISABLE_MS_FALLBACK | 0 (fallback 已恢复) |
-| nv_gw.NVU_BUFFER_CALLERS | cc4101-primary,openclaw2 |
-| nv_gw.NVU_PEER_FB_SKIP_MODELS | glm5_2_nv,dsv4p_nv |
-| nv_gw.NVU_FORCE_STREAM_UPGRADE | 0 |
-| nv_gw.NVU_FORCE_STREAM_UPGRADE_TIMEOUT | 150 |
-| nv_gw.NVU_BUFFER_MAX_RETRIES | 5 |
-| nv_gw.NVU_BUFFER_TIMEOUT_STAIRS | 90,90,90,90,90 |
-| nv_gw.NVU_BUFFER_TOTAL_DEADLINE_S | 450 |
-| nv_gw.NVU_KEYMGR_429_BASE_COOLDOWN | 120 |
-| nv_gw.NVU_KEYMGR_429_MAX_COOLDOWN | 600 |
-| nv_gw.NVU_KEYMGR_CONN_BASE_COOLDOWN | 30 |
-| nv_gw.NVU_KEYMGR_CONN_FAIL_THRESHOLD | 3 |
-| cc4101.CC4101_STREAM_TOTAL_DEADLINE_S | 470 |
-| cc4101.PRIMARY_HEADER_TIMEOUT | 400 |
-| cc4101.UPSTREAM_TIMEOUT | 130 |
-| cc4101.UPSTREAM_IDLE_TIMEOUT | 150 |
-| cc4101.CC4101_PRIMARY_SKIP_S | 30 |
-| cc4101.CC4101_PRIMARY_FAIL_THRESHOLD | 3 |
-| cc4101.FALLBACK_UPSTREAM_URL | http://ms_gw:40007/v1/chat/completions |
-| cc4101.PRIMARY_UPSTREAM_URL | http://nv_gw:40006/v1/messages |
-| cc4101.PRIMARY_UPSTREAM_MODEL | glm5_2_nv |
-| cc4101.FALLBACK_UPSTREAM_MODEL | glm5_2_ms |
+## 参数快照 (2026-08-02 06:40 CST)
+- nv_gw: NVU_DISABLE_MS_FALLBACK=0, BUFFER_MAX_RETRIES=5, BUFFER_TIMEOUT_STAIRS=90,90,90,90,90, BUFFER_TOTAL_DEADLINE=450s, TIER_TIMEOUT_BUDGET=180s, UPSTREAM_TIMEOUT=90s
+- cc4101: CC4101_STREAM_TOTAL_DEADLINE_S=470, PRIMARY_HEADER_TIMEOUT=400, FALLBACK_UPSTREAM_URL=http://ms_gw:40007/v1/chat/completions
+- 链路: cc2→cc4101(4101)→nv_gw(40006, glm5_2_nv)→NVCF, fallback ms_gw(40007) 已恢复
+- 铁律: 只改 HM2 nv_gw, 不碰 HM1, 不碰 ms_gw 源码, 改前有数据改后必验证
