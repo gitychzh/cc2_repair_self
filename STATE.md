@@ -1,57 +1,58 @@
 # STATE — cc2 自优化 nv_gw 链路 (R-nvonly 方向)
 
-## 当前轮基线 (2026-08-02 16:05 CST, R285 NOP 巡检轮)
-- 本仓 master: 本轮 R285. (主仓 hermes_improve_self main 已 push 3eac00a R283.)
+## 当前轮基线 (2026-08-02 16:08 CST, R286 NOP 巡检轮)
+- 本仓 master: 本轮 R286. (主仓 hermes_improve_self main 已 push 1deb6d0 三模型稳定性对比.)
 - **架构 (主仓 b4527f9, 非本轮)**: cc4101 `PRIMARY_UPSTREAM_MODEL` 已从
   `glm5_2_nv` 切到 `dsv4p_nv`. cc2 链路 = cc4101(dsv4p_nv) → nv_gw → NVCF.
-- **本轮 R285 (hm2_cc2)**: NOP 巡检轮. cc2 (cc4101-primary) 30min 0 req (session 间歇空闲).
-  dsv4p_nv 30min 全 caller SR=68.1% (32/47), 失败 15 全 `all_tiers_exhausted`.
-  **新现象 (非新错误)**: 08:02:05 UTC `other` caller 同��并发 10 请求, 全 1ms 502
-  (nv_gw 选 key 前 all_tiers_exhausted 瞬拒, nv_key_idx/egress_ip 空), 命中 08:00 hermes
-  429/502 触发的 cooling 尾巴窗口; 08:05:10 `other` 恢复 200 → cooling ~3min 后恢复.
-  hermes 边界点 429 (07:35/07:40/08:00) + 502 (07:58/08:00) 与 R278-R284 同源 function 级配额.
+- **本轮 R286 (hm2_cc2)**: NOP 巡检轮. cc2 (cc4101-primary) 30min 0 req (session 间歇空闲).
+  dsv4p_nv 30min 全 caller SR=56.9% (33/58), 失败 25 全 `all_tiers_exhausted`.
+  **沿用 R285 现象**: 08:02:05 + 08:05:10 `other` caller 两批同秒并发 10×502
+  (nv_gw 选 key 前 all_tiers_exhausted 瞬拒, nv_key_idx/egress_ip 空), 命中 07:58-08:00 hermes
+  429/502 触发的 cooling 尾巴窗口; 08:05 有 1×200 → cooling ~3min 后恢复.
+  hermes 边界点 429 (07:40/08:00) + 502 (07:58/08:00) 与 R278-R285 同源 function 级配额.
   07:45-07:59 连续 ~28×200 (hermes, key2, egress 203.10.96.139 100% SR) 恢复窗口密度高.
   cc2 无流量不受影响, 0 fallback 0 deadline. 0 改动 0 restart.
-  十八轮一致 R268-R285.
+  十九轮一致 R268-R286.
 
 ## R-nvonly 核心铁律 (持续生效)
 - 只改 HM2 nv_gw (40006), 不碰 HM1, 不碰 ms_gw 源码.
 - ms_gw fallback 已恢复 (`NVU_DISABLE_MS_FALLBACK=0`, `FALLBACK_UPSTREAM=ms_gw:40007`), 不主动禁用.
 - 改前有数据, 改后必验证, 写入仓库.
 
-## 本轮关键数据 (30min 实时 DB + 链路分析注入 ~16:03 CST)
+## 本轮关键数据 (30min 实时 DB + 链路分析注入 ~16:08 CST)
 
 ### 1. cc2 (cc4101-primary) 30min 0 req
-- 同 R275-R284, session 间歇空闲, 链路空闲健康. 0 fallback 0 deadline.
+- 同 R275-R285, session 间歇空闲, 链路空闲健康. 0 fallback 0 deadline.
 - nv_tier_attempts 30min 0 条 (cc4101-primary); cc_requests stream_total_deadline 6h 0 条.
 
-### 2. dsv4p_nv 30min 全 caller SR=68.1% (32/47)
+### 2. dsv4p_nv 30min 全 caller SR=56.9% (33/58)
 | caller | status | count | avg_ms | 备注 |
 |---|---|---|---|---|
 | hermes | 200 | 32 | 10759 | key2, egress 203.10.96.139, 100% SR |
-| hermes | 429 | 3 | 2686 | 边界点 07:35/07:40/08:00 |
-| hermes | 502 | 2 | 17382 | 07:58 (34762ms) + 08:00 (1ms) |
-| other | 200 | 1 | 2290 | 08:05 恢复 |
-| other | 502 | 10 | 1 | 08:02:05 同秒并发, cooling 窗口 |
+| hermes | 429 | 3 | ~2686 | 边界点 07:40/08:00 |
+| hermes | 502 | 2 | ~17382 | 07:58 (34762ms) + 08:00 (1ms) |
+| other | 200 | 1 | 2290 | 08:05 恢复 (key1) |
+| other | 502 | 20 | 1 | 08:02×10 + 08:05×10 同秒并发, cooling 窗口 |
+| other(glm5_2_nv) | 200 | 20 | — | 100% SR, 非 dsv4p |
 
-### 3. 08:02:05 突发 10×502 根因
-- `other` caller (未识别, 非 cc2 非 hermes) 同秒并发 10 请求.
-- 此时全 key 处于 cooling (08:00:14 hermes 429 触发 function 级配额耗尽, 08:00:31 hermes 502).
+### 3. 08:02:05 + 08:05:10 两批 10×502 根因
+- `other` caller (未识别, 非 cc2 非 hermes) 两批同秒并发各 10 请求.
+- 此时全 key 处于 cooling (07:58 hermes 502 + 08:00 hermes 429/502 触发 function 级配额耗尽).
 - nv_gw 选 key 前 all_tiers_exhausted (1ms 瞬拒, nv_key_idx/egress_ip 空, 未打 NVCF).
 - **非新错误类型**, 仍是 `all_tiers_exhausted`; **非 cc2 流量**; **自恢复** (08:05 other 200).
-- 与 hermes 边界点 429 同源 (function 级配额), 仅并发量集中.
+- 与 hermes 边界点 429 同源 (function 级配额), 仅并发量集中两批.
 
 ### 4. 恢复证据
 - 07:45-07:59 连续 ~28×200 (hermes, key2) — 配额 5min 边界恢复后连续成功.
-- 08:05:10 `other` caller 200 (key_idx=1, 2290ms) — cooling 窗口 ~3min 后恢复.
-- 单 egress IP 203.10.96.139 35×200 100% SR — IP 健康.
+- 08:05 `other` caller 200 (key_idx=1, 2290ms) — cooling 窗口 ~3min 后恢复.
+- 单 egress IP 203.10.96.139 32×200 100% SR — IP 健康.
 
 ### 5. 健康检查
 - `curl /health` → ok, nv_num_keys=5, nvcf_pexec_models=[kimi_nv,dsv4p_nv,glm5_2_nv].
 - docker ps: nv_gw/cc4101/logs_db/ms_gw/nv_gw_stable 全 Up.
 - buffer/wait/keymanager 日志 30min 空 (无 buffer 流量, cc2 0 req).
 
-## 根因: buffer 对 function 级 429 无保护 (设计盲区, 非代码缺陷, 沿用 R278-R284 分析)
+## 根因: buffer 对 function 级 429 无保护 (设计盲区, 非代码缺陷, 沿用 R278-R285 分析)
 
 ### 现象
 - dsv4p_nv 5key (k0-k4) 全绑同一 NVCF function.
@@ -62,32 +63,32 @@
 
 ### 为何 hermes 边界 429/502 常态, cc2 buffer_exhausted 罕见
 - hermes 走 pexec peek path: 单 key 探测 429 → 一击即败 (~2-8s), 快速释放, 不消耗 buffer.
-- other caller 并发命中 cooling 窗口 → 1ms all_tiers_exhausted 瞬拒 (本轮 08:02:05 ×10).
+- other caller 并发命中 cooling 窗口 → 1ms all_tiers_exhausted 瞬拒 (本轮 08:02 + 08:05 各×10).
 - cc2 走 buffer 5key 轮转: 5 key 全 429 → 消耗 ~165s → buffer_exhausted.
 - cc2 流量极低, 命中 function 配额边界点概率远低于 hermes 高频探测, buffer_exhausted 罕见且自恢复.
 
 ### 结论
 - **非 nv_gw 代码缺陷, 无需本轮改码**. NVCF function 级配额是上游硬限制.
-- buffer 5key 轮转对 key/IP 级 429 仍有效 (R268-R285 验证), 对 function 级 429 是已知盲区.
+- buffer 5key 轮转对 key/IP 级 429 仍有效 (R268-R286 验证), 对 function 级 429 是已知盲区.
 - 当前 cc2 流量极低, buffer_exhausted 罕见且自恢复, 不达介入阈值.
 
 ## 判稳
 - **NOP 巡检轮**. cc2 primary 0 req, 链路空闲健康, 0 fallback 0 deadline.
 - dsv4p_nv 失败全在 hermes/other caller 打 NVCF function 级配额边界, 非 nv_gw 代码缺陷.
-- 08:02:05 10×502 是 `other` caller 并发命中 cooling 窗口一次性事件, 自恢复于 08:05.
-- 错误类型无新增, 全 all_tiers_exhausted, 与 R278-R284 一致.
-- 十八轮一致 R268-R285.
+- 08:02 + 08:05 两批 other 并发 502 是 `other` caller 命中 cooling 窗口事件, 自恢复于 08:05.
+- 错误类型无新增, 全 all_tiers_exhausted, 与 R278-R285 一致.
+- 十九轮一致 R268-R286.
 
 ## 下一步
 1. 持续监控 cc2 primary buffer_exhausted/all_tiers_exhausted 是否复发 (>5/h 或蔓延至非边界点才需介入). 现状罕见.
-2. 监控 `other` caller 并发 502 是否恶化 (频率/蔓延非 cooling 窗口). 现状一次性自恢复.
+2. 监控 `other` caller 并发 502 是否恶化 (频率/蔓延非 cooling 窗口). 现状两批自恢复.
 3. 若复发频繁, 考察根因层改进 (非本轮任务, 记录待后续):
    - 把 dsv4p_nv 5key 拆到不同 NVCF function (需上游侧, 非 nv_gw 可改);
    - 或在 nv_gw 侧对 `all_tiers_exhausted`/429-边界点引入 WaitQueue event-driven 短等待
      (跨 5min 边界恢复), 而非 buffer 死轮转耗 165s.
 4. cc2 session 恢复流量后, 复测 buffer 5key 轮转对边界点 429 的抵抗力.
 
-## 参数快照 (nv_gw + cc4101, 同 R284)
+## 参数快照 (nv_gw + cc4101, 同 R285, 0 改动)
 - nv_gw: NVU_DISABLE_MS_FALLBACK=0, UPSTREAM_TIMEOUT=90, TIER_COOLDOWN_S=180,
   KEY_COOLDOWN_S=30, NVU_BUFFER_CALLERS=cc4101-primary,openclaw2,
   NVU_PEER_FB_SKIP_MODELS=glm5_2_nv,dsv4p_nv, NVU_CALLER_KEY_MAP=hermes:2;openclaw:3;opencode:4,
