@@ -1,18 +1,18 @@
 # STATE — cc2 (hm2) 自优化 nv_gw 链路
 
-## 当前轮: R412 NOP 巡检轮 (2026-08-03 00:55 CST)
+## 当前轮: R413 NOP 巡检轮 (2026-08-03 00:18 CST)
 
-## 本轮摘要 (R412)
-- **NOP 巡检轮, 0 改动 0 restart**. cc2 (cc4101-primary) 30min 0 req (session 间歇空闲, 连续第 4 轮).
-- DB 注入快照 (00:14): dsv4p_nv 全 caller 30min SR=82.8% (24/29), 全来自非缓冲 caller hermes.
-  - 24×200 全 key2 + egress 203.10.96.139, avg 12684ms (ttfb 12082), finish tool_calls×21 + stop×3, 无 IP 归属 fail.
-  - 5×all_tiers_exhausted (avg 8488ms, 无 key/IP 归属, mapped-tier 直接失败) + 4×429 + 1×502.
-  - 30min fallback: f×29 (0 fallback 发生).
-  - 分钟趋势: 15:45/50/55/16:00 各 1×429 (4×连续 429 跨 20min, 每 ~5min 一次的限速模式),
-    16:05-16:12 连续 8min 出 24×200 + 1×502 (恢复期, 502 在恢复期末尾偶发).
-- glm5_2_nv 30min 0 req — 无健康数据, 切换模型违反"改前必有数据"铁律.
+## 本轮摘要 (R413)
+- **NOP 巡检轮, 0 改动 0 restart**. cc2 (cc4101-primary) 30min 0 req (session 间歇空闲, 连续第 5 轮).
+- DB 快照 (00:18): dsv4p_nv 全 caller 30min SR=88.2% (30/34), 全来自非缓冲 caller hermes.
+  - 30×200 全 key2 + egress 203.10.96.139, avg 12199ms (ttfb 11684), finish tool_calls×26 + stop×4, 无 IP 归属 fail.
+  - 4×all_tiers_exhausted (avg 10198ms, 无 key/IP 归属, mapped-tier 直接失败) + 3×429 + 1×502.
+  - 30min fallback: f×34 (0 fallback 发生).
+  - 分钟趋势: 15:50/55/16:00 各 1×429 (3×连续 429 跨 15min, 每 ~5min 一次的限速模式),
+    16:05-16:16 连续 12min 出 30×200 + 1×502 (恢复期, 502 在恢复期偶发).
+- glm5_2_nv 30min 0 req — 无健康数据.
 - 30min nv_tier_attempts: 0 行 (无缓冲 caller 流量, 无 tier 尝试日志).
-- 错误类型无新增, 与 R268-R411 一致 (**一百三十六轮一致**).
+- 错误类型无新增, 与 R268-R412 一致 (**一百三十七轮一致**).
 - 链路自恢复 (ProbeWorker + KeyManager decayed reset + buffer 5key 轮转) 持测有效.
 
 ## R-nvonly 核心铁律 (持续生效)
@@ -20,12 +20,12 @@
 - ms_gw fallback 已恢复 (`NVU_DISABLE_MS_FALLBACK=0`, `FALLBACK_UPSTREAM=ms_gw:40007`), 不主动禁用.
 - 改前有数据, 改后必验证, 写入仓库.
 
-## dsv4p_nv SR 趋势 (近 3 轮 30min 快照, 全非缓冲 caller, cc2 0 req)
-- R409 25.0% → R410 37.5% → R411 68.4% → **R412 82.8% (24/29)** — 持续回升, 仍在 NVCF 配额波动区间.
-- R410 实测 6h 按小时 SR 75-83%, 30min 小样本快照谷底不能代表持续低位.
+## dsv4p_nv SR 趋势 (近 4 轮 30min 快照, 全非缓冲 caller, cc2 0 req)
+- R409 25.0% → R410 37.5% → R411 68.4% → R412 82.8% → **R413 88.2% (30/34)** — 持续回升.
+- 仍在 NVCF function 配额波动区间, 非代码缺陷.
 - 切换判据应以小时级 SR 为准, 非 30min 小样本.
 
-## 根因: NVCF dsv4p function 429/502 波 (非代码缺陷, 沿用 R278-R411 分析)
+## 根因: NVCF dsv4p function 429/502 波 (非代码缺陷, 沿用 R278-R412 分析)
 - 非缓冲 caller hermes mapped-tier 直接走 NVCF, function 配额瞬时空位 → 429/502 → all_tiers_exhausted.
 - 5key (k0-k4) 全绑同一 NVCF function, function 级配额耗尽时多 key 同时收 429 → all_tiers_exhausted.
 - buffer 5key 轮转设计针对 key/IP 级隔离, 对 function 级 429 是已知盲区 (非代码缺陷).
@@ -33,8 +33,8 @@
 
 ## 判稳
 - **NOP 巡检轮**. cc2 primary 0 req, 链路空闲健康, 0 fallback 0 deadline.
-- dsv4p_nv 本轮快照 SR=82.8% (24/29), 较 R409-R411 持续回升, 仍在 NVCF function 配额波动区间.
-- dsv4p 错误类型无新增, 与 R268-R411 一致 (一百三十六轮一致).
+- dsv4p_nv 本轮快照 SR=88.2% (30/34), 较 R412 持续回升, 仍在 NVCF function 配额波动区间.
+- dsv4p 错误类型无新增, 与 R268-R412 一致 (一百三十七轮一致).
 - 切换 PRIMARY_UPSTREAM_MODEL 到 glm5_2_nv 是大改: cc2 缓冲 caller 0 req + glm5_2_nv 30min 0 req,
   无 buffer 路径数据支撑, 0 req 窗口不满足"改前必有数据"铁律 → 暂不切.
 
