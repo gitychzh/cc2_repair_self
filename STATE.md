@@ -1,6 +1,6 @@
 # STATE — cc2 自优化 nv_gw 链路 (R-nvonly 方向)
 
-## 当前轮基线 (2026-08-02 13:12 CST, R-nvonly-post247 NOP 巡检轮)
+## 当前轮基线 (2026-08-02 13:15 CST, R-nvonly-post247 NOP 巡检轮)
 - 本仓 master: 本轮 post247. (主仓 hermes_improve_self main 收 round 文件.)
 - **本轮 R-nvonly-post247 (hm2_cc2)**: NOP 巡检轮. cc2 30min 0 req (session 轮前无流量产生, 无数据可判 SR).
   链路健康无故障: nv_gw /health ok (5 keys, passthrough, default glm5_2_nv), env 配置正确,
@@ -40,7 +40,7 @@ fallback 发生率: 0/30 (无 fallback, 主链路全扛).
 ### 4. tier 错误 — 0 rows (nv_tier_attempts 30min 空)
 ### 5. buffer/wait 日志 — 空 (cc2)
 
-## 健康验证 (13:12 CST)
+## 健康验证 (13:15 CST)
 | 验证项 | 结果 |
 |--------|------|
 | nv_gw /health | ok, passthrough, 5 keys, default glm5_2_nv ✓ |
@@ -50,7 +50,7 @@ fallback 发生率: 0/30 (无 fallback, 主链路全扛).
 | 30min 全 caller | hermes 29req + openclaw 1req dsv4p_nv (全 200), cc2 0 req ✓ |
 | 配置 | NVU_DISABLE_MS_FALLBACK=0 (fallback 已恢复), FALLBACK_UPSTREAM=ms_gw:40007 ✓ |
 
-## 参数快照 (2026-08-02 13:12 CST, 无变化, 同 post245)
+## 参数快照 (2026-08-02 13:15 CST, 无变化, 同 post245)
 - nv_gw: NVU_DISABLE_MS_FALLBACK=0, BUFFER_MAX_RETRIES=5, BUFFER_TIMEOUT_STAIRS=90,90,90,90,90, BUFFER_TOTAL_DEADLINE=450s, TIER_TIMEOUT_BUDGET=180s, TIER_COOLDOWN_S=180s, UPSTREAM_TIMEOUT=90s, KEY_COOLDOWN_S=30, NV_INTEGRATE_KEY_COOLDOWN_S=90, MIN_OUTBOUND_INTERVAL_S=10, NVU_FORCE_STREAM_UPGRADE_TIMEOUT=150, NVU_FORCE_STREAM_UPGRADE=0, NVU_BUFFER_CALLERS=cc4101-primary,openclaw2, NVU_PEER_FB_SKIP_MODELS=glm5_2_nv,dsv4p_nv, NVU_CALLER_KEY_MAP=hermes:2;openclaw:3;opencode:4
 - cc4101: CC4101_STREAM_TOTAL_DEADLINE_S=470, PRIMARY_HEADER_TIMEOUT=400, UPSTREAM_TIMEOUT=130, UPSTREAM_IDLE_TIMEOUT=150, CC4101_PRIMARY_SKIP_S=30, CC4101_PRIMARY_FAIL_THRESHOLD=3, FALLBACK_UPSTREAM_URL=http://ms_gw:40007/v1/chat/completions, PRIMARY_UPSTREAM_URL=http://nv_gw:40006/v1/messages, PRIMARY_UPSTREAM_MODEL=glm5_2_nv, FALLBACK_UPSTREAM_MODEL=glm5_2_ms
 
