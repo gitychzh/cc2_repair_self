@@ -1,12 +1,12 @@
 # STATE — cc2 (hm2) 自优化 nv_gw 链路
 
-## 当前轮: R399 NOP 巡检轮 (2026-08-02 23:26 CST)
+## 当前轮: R401 NOP 巡检轮 (2026-08-02 23:31 CST)
 
-## 本轮摘要 (R399)
+## 本轮摘要 (R401)
 - **NOP 巡检轮, 0 改动 0 restart**. cc2 (cc4101-primary) 30min 0 req (session 间歇空闲).
-- dsv4p_nv 30min 全 caller SR=93.3% (28/30): 27×200 key2 (egress 203.10.96.139) + 1×200 key3 + 2×fail (429+502, all_tiers_exhausted avg 18021ms).
+- dsv4p_nv 30min 全 caller SR=93.9% (31/33): 30×200 key2 (egress 203.10.96.139) + 1×200 key3 + 2×fail (429+502, all_tiers_exhausted avg 20818ms).
 - 失败全非缓冲 caller hermes mapped-tier 直接失败, cc2 缓冲 caller 不受影响.
-- 错误类型无新增, 与 R268-R398 一致 (**一百二十三轮一致**).
+- 错误类型无新增, 与 R268-R400 一致 (**一百二十五轮一致**).
 - /health ok, 容器全 Up (nv_gw 21h, cc4101 9h, ms_gw 3d, logs_db 3d).
 - 链路自恢复 (ProbeWorker + KeyManager decayed reset + buffer 5key 轮转) 持测有效.
 
@@ -16,12 +16,12 @@
 - 改前有数据, 改后必验证, 写入仓库.
 
 ## dsv4p_nv SR 趋势 (近 10 轮, 全非缓冲 caller, cc2 0 req)
-- R390 0% → R391 0% → R392 44.4% → R393 44.4% → R394 58.3% → R395 71.4% → R396 87.0% → R397 87.5% → R398 93.3% → **R399 93.3%**
+- R392 44.4% → R393 44.4% → R394 58.3% → R395 71.4% → R396 87.0% → R397 87.5% → R398 93.3% → R399 93.3% → R400 97.1% → **R401 93.9%**
 - 样本极小全非缓冲 caller mapped-tier 直接失败, SR 直接反映 NVCF 瞬时配额波动.
 - cc2 缓冲 caller 走 buffer 5key 轮转, 不走 mapped-tier 直接失败, 不受同影响.
-- 趋势持稳高位 (R398-R399 均 93.3%), NVCF function 配额波动恢复至高位区间.
+- 趋势高位小幅回落 (R400 97.1% → R401 93.9%, 样本极小自然波动), NVCF function 配额波动维持高位区间.
 
-## 根因: NVCF dsv4p function 429/502 波 (非代码缺陷, 沿用 R278-R398 分析)
+## 根因: NVCF dsv4p function 429/502 波 (非代码缺陷, 沿用 R278-R400 分析)
 - 非缓冲 caller hermes mapped-tier 直接走 NVCF, function 配额瞬时空位 → 429/502 → all_tiers_exhausted.
 - 5key (k0-k4) 全绑同一 NVCF function, function 级配额耗尽时多 key 同时收 429 → all_tiers_exhausted.
 - buffer 5key 轮转设计针对 key/IP 级隔离, 对 function 级 429 是已知盲区 (非代码缺陷).
@@ -29,8 +29,8 @@
 
 ## 判稳
 - **NOP 巡检轮**. cc2 primary 0 req, 链路空闲健康, 0 fallback 0 deadline.
-- dsv4p_nv 本轮 SR=93.3% (28/30), 与 R398 93.3% 持平 (样本极小自然波动, 趋势高位持稳).
-- dsv4p 错误类型无新增, 与 R268-R398 一致 (一百二十三轮一致).
+- dsv4p_nv 本轮 SR=93.9% (31/33), 较 R400 97.1% 小幅回落 (样本极小自然波动, 趋势持续高位).
+- dsv4p 错误类型无新增, 与 R268-R400 一致 (一百二十五轮一致).
 
 ## 下一步
 - 继续 NOP 巡检, 等 cc2 流量恢复后观察 dsv4p_nv buffer 路径行为.
