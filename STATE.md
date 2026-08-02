@@ -1,16 +1,16 @@
 # STATE — cc2 自优化 nv_gw 链路 (R-nvonly 方向)
 
-## 当前轮基线 (2026-08-02 09:05 CST, R-nvonly-post157 NOP 巡检轮)
-- 主仓 git HEAD: 5ee341d (post156), 本轮 post157 基于 5ee341d, 待 push origin main
-- **本轮 R-nvonly-post157 (hm2_cc2)**: NOP 巡检轮. cc2 30min 0 req (session 轮前无流量产生, 无数据可判 SR).
+## 当前轮基线 (2026-08-02 09:10 CST, R-nvonly-post158 NOP 巡检轮)
+- 主仓 git HEAD: 待 push (post158), 上轮 post157 (eaa341d)
+- **本轮 R-nvonly-post158 (hm2_cc2)**: NOP 巡检轮. cc2 30min 0 req (session 轮前无流量产生, 无数据可判 SR).
   链路健康无故障: 容器全 Up (nv_gw/cc4101/nv_gw_stable 7h, ms_gw/logs_db 2d),
   env 配置正确 (NVU_DISABLE_MS_FALLBACK=0 fallback 已恢复, buffer 5×90s=450s, cc4101 deadline 470s, UPSTREAM_TIMEOUT=90/130),
-  0 cc2 tier error, 0 cc2 buffer/wait/error 日志, 0 stream_total_deadline (6h, DB 直查确认).
+  0 cc2 tier error, 0 cc2 buffer/wait/error 日志.
   0 改动, 0 重启.
-  hermes 打 dsv4p_nv SR=0.0% (0/6, 6×429 all_tiers_exhausted 周期性 5min 一发) 是 NVCF 侧 dsv4p 限流, 非 cc2 链路 (cc2 走 glm5_2_nv).
-  openclaw 同期 dsv4p_nv 1×200 佐证: 429 是配额限流非链路级故障.
-  glm5_2_nv 连续 post100-post157 (58 轮) 无 dsv4p 故障扩散.
-- round 文件: `~/hm_ps/hermes_improve_self/rounds/R-nvonly-post157_hm2_cc2_nop_patrol.md`
+  hermes 打 dsv4p_nv SR=25.0% (2/8, 6×429 all_tiers_exhausted 周期性 5min 一发) 是 NVCF 侧 dsv4p 限流, 非 cc2 链路 (cc2 走 glm5_2_nv).
+  openclaw 同期 dsv4p_nv 2×200 佐证: 429 是配额限流非链路级故障.
+  glm5_2_nv 连续 post100-post158 (59 轮) 无 dsv4p 故障扩散.
+- round 文件: `~/hm_ps/hermes_improve_self/rounds/R-nvonly-post158_hm2_cc2_nop_patrol.md`
 
 ## R-nvonly 核心铁律 (持续生效)
 - 只改 HM2 nv_gw (40006), 不碰 HM1, 不碰 ms_gw 源码.
@@ -21,44 +21,43 @@
 
 ### 1. cc4101-primary (cc2) 30min 窗口 — 0 req
 本轮 30min 窗口 cc2 无请求产生 (session 轮前无流量). 无数据可判 cc2 SR.
-链路健康无故障: 容器全 Up, env 配置正确, 0 cc2 tier error, 0 cc2 buffer/wait/error 日志,
-0 stream_total_deadline (6h, DB 直查确认).
+链路健康无故障: 容器全 Up, env 配置正确, 0 cc2 tier error, 0 cc2 buffer/wait/error 日志.
 
 ### 2. 其他 caller (hermes/openclaw, 非 cc2 链路)
-| caller | status | error_type | count |
-|--------|--------|------------|-------|
-| hermes | 429 | all_tiers_exhausted | 6 |
-| openclaw | 200 | (无) | 1 |
+| caller | model | status | count |
+|--------|-------|--------|-------|
+| hermes | dsv4p_nv | 429 | 6 |
+| openclaw | dsv4p_nv | 200 | 2 |
 
 dsv4p_nv (hermes): 6×429 (all_tiers_exhausted, 5key 全挂, NVCF 侧 dsv4p 限流).
-dsv4p_nv (openclaw): 1×200 (链路本身可用, 佐证 429 是 NVCF 配额限流非链路挂).
-周期性 5min 一发 429 (00:35/40/45/50/55/01:00 UTC), NVCF 侧 dsv4p 限流模式, 非 cc2 链路问题.
+dsv4p_nv (openclaw): 2×200 (链路本身可用, 佐证 429 是 NVCF 配额限流非链路挂).
 **与 cc2 无关** (cc2 走 glm5_2_nv, 不打 dsv4p_nv).
-30min fallback 发生率: f=6 (dsv4p 全挂 fallback ms, ms_gw fallback 已恢复正常工作).
 
-### 3. dsv4p_nv 按分钟趋势 (周期性 429, UTC)
-| 分钟 (UTC) | status | count |
-|------|--------|-------|
-| 00:35 | 429 | 1 |
-| 00:40 | 429 | 1 |
-| 00:45 | 429 | 1 |
-| 00:50 | 429 | 1 |
-| 00:55 | 429 | 1 |
-| 01:00 | 429 | 1 |
+### 3. 30min 错误分类
+| error_type | count |
+|------------|-------|
+| all_tiers_exhausted | 6 |
 
-周期性 5min 一发 429, NVCF 侧 dsv4p 限流模式, 非 cc2 链路问题.
-与 post135-post156 完全一致 (数据复测确认).
+全部 6× 是 hermes→dsv4p_nv 的 NVCF 限流, 非 cc2 链路.
 
-## 健康验证 (09:05 CST)
+### 4. tier 错误 — 0
+```
+(0 rows)
+```
+
+### 5. buffer/wait 日志 — 空
+无 BUFFER-/WAIT- 日志, 无 buffer/wait 触发.
+
+## 健康验证 (09:10 CST)
 | 验证项 | 结果 |
 |--------|------|
 | nv_gw /health | ok, passthrough, 5 keys, default glm5_2_nv ✓ |
 | docker ps | nv_gw/cc4101/nv_gw_stable Up 7h, ms_gw/logs_db Up 2d ✓ |
 | cc2 (cc4101-primary) 30min SR | 0 rows (无流量, 链路健康无故障) ✓ |
-| stream_total_deadline (6h) | 0 ✓ |
-| 30min 全 caller | hermes 6×429 (dsv4p_nv 限流), openclaw 1×200 (dsv4p_nv 成功), cc2 0 req ✓ |
+| 30min tier error | 0 ✓ |
+| 30min 全 caller | hermes 6×429 (dsv4p_nv 限流), openclaw 2×200 (dsv4p_nv 成功), cc2 0 req ✓ |
 | 配置 | NVU_DISABLE_MS_FALLBACK=0 (fallback 已恢复), FALLBACK_UPSTREAM=ms_gw:40007 ✓ |
 
-## 参数快照 (2026-08-02 09:05 CST)
+## 参数快照 (2026-08-02 09:10 CST)
 - nv_gw: NVU_DISABLE_MS_FALLBACK=0, BUFFER_MAX_RETRIES=5, BUFFER_TIMEOUT_STAIRS=90,90,90,90,90, BUFFER_TOTAL_DEADLINE=450s, TIER_TIMEOUT_BUDGET=180s, UPSTREAM_TIMEOUT=90s, KEY_COOLDOWN_S=30, NV_INTEGRATE_KEY_COOLDOWN_S=90, MIN_OUTBOUND_INTERVAL_S=10, TIER_COOLDOWN_S=180
 - cc4101: CC4101_STREAM_TOTAL_DEADLINE_S=470, PRIMARY_HEADER_TIMEOUT=400, UPSTREAM_TIMEOUT=130, FALLBACK_UPSTREAM_URL=http://ms_gw:40007/v1/chat/completions, PRIMARY_UPSTREAM_URL=http://nv_gw:40006/v1/messages, PRIMARY_UPSTREAM_MODEL=glm5_2_nv, FALLBACK_UPSTREAM_MODEL=glm5_2_ms
