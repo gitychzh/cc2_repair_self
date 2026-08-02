@@ -1,35 +1,23 @@
-# R476 — NOP 巡检轮 (2026-08-03 04:00 CST)
+# R477 — NOP 巡检轮 (2026-08-03 04:06 CST)
 
 ## 摘要
 - 0 改动 0 restart. NOP 巡检轮.
-- 数据窗口 19:25-19:55 UTC (03:54 CST 注入 + 04:00 复测, 与 R470-R475 同低谷窗口).
+- 数据窗口 19:30-19:55 UTC (03:57 CST 注入), 与 R475/R476 同低谷窗口高度一致.
 - cc2 (cc4101-primary) 30min 0 req (cc2 session 间歇空闲, 无评估样本, 铁律1 不满足 → 不动码).
-- dsv4p_nv 全 caller 30min SR=0.0% (0/6, 全 429), 与 R475 同窗口一致.
-- 6h 视角 dsv4p_nv SR=75.0% (159/212), 处历史波动区间 46-85%, 与 R475 完全一致 (0 滚动差异).
-- 2h per-bucket: 18:00 UTC 高 200 桶 (22×200/9×429/1×502), 19:00 UTC 进入低谷 (4×200/10×429).
-- 错误: all_tiers_exhausted ×6 (sub=all_tiers_failed_in_mapped_tier), avg_dur 1295ms, 与 R475 一致.
-- nv_tier_attempts 30min 0 行 (429 在 tier 层前被拒, 空 IP, 与 R470-R475 一致).
-- 6h stream_total_deadline = 0 (deadline 链无越界).
-- 6h 502 = 4 (低频, 18:00 UTC 1×502, 单点模式继续消退).
+- dsv4p_nv 全 caller 30min SR=0.0% (0/6, 全 429), 与 R476 同窗口一致.
+- 错误: all_tiers_exhausted ×6 (sub=all_tiers_failed_in_mapped_tier), avg_dur 1222ms (R476 1295ms, −73ms 抖动).
+- nv_tier_attempts 30min 0 行 (429 在 tier 层前被拒, 空 IP, 与 R470-R476 一致).
 - fallback f=6/30min (dsv4p 全挂走 ms_gw 兜底, 链路有保障).
-- nv_gw Up 13h, cc4101 Up 3h (本轮未重启).
-- 配置实测确认与 R475 完全一致, 无漂移.
+- nv_gw Up 13h, cc4101 Up 3h, nv_gw_stable Up 26h, ms_gw Up 3 days (本轮未重启).
+- 配置实测确认与 R475/R476 完全一致, 无漂移.
 
-## 链路数据 (03:54 CST 注入 + 04:00 复测)
+## 链路数据 (03:57 CST 注入 + 04:06 复测)
 ### 30min 窗口 (hermes caller, 全 dsv4p_nv)
-- 6×429, SR 0.0% (与 R475 同窗口, R467-R476 九轮低谷锁定)
-- 错误分类: all_tiers_exhausted ×6 (sub=all_tiers_failed_in_mapped_tier), avg_dur 1295ms
-- nv_tier_attempts: 0 行 (429 未进入 tier 尝试, 空 IP, 与 R470-R475 一致)
+- 6×429, SR 0.0% (与 R475/R476 同窗口, R467-R477 十轮低谷锁定)
+- 错误分类: all_tiers_exhausted ×6 (sub=all_tiers_failed_in_mapped_tier), avg_dur 1222ms
+- nv_tier_attempts: 0 行 (429 未进入 tier 尝试, 空 IP, 与 R470-R476 一致)
 - fallback: 6 次 (dsv4p 全挂 → cc4101 走 ms_gw glm5_2_ms, 兜底正常)
-
-### 6h 视角 (dsv4p_nv)
-- 159×200 + 49×429 + 4×502 = SR 75.0% (212req)
-- 与 R475 完全一致 (159/212 vs 159/212, 0 滚动差异, 窗口稳定)
-
-### 2h 按桶 (10min, UTC)
-- 17:00(0/1 429)→18:00(22×200+9×429+1×502)→19:00(4×200+10×429)
-- 18:00 UTC 高 200 桶 (22×200), 19:00 UTC 进入低谷 (4×200/10×429), 符合 dsv4p_nv 周期性配额模式.
-- 与 R475 的 02:00-02:40 高 + 03:00+ 低谷 是同一现象 (UTC+8 时区差).
+- per-min 趋势: 每 5min 1 次离散 429 (19:30/35/40/45/50/55), 非集中爆发
 
 ## keymgr 行为 (与历史一致)
 - 单次 429 即触发 NV-GLOBAL-COOLDOWN: "all keys 429. Marking all cooling 180s (TIER_COOLDOWN)"
@@ -37,22 +25,21 @@
 - tier=dsv4p_nv 只有 1 个 tier, ring 无 fallback → all_tiers_exhausted 直接 ABORT-NO-FALLBACK
 - 这是历史一致行为 (R268 起 170+ 轮), 非本轮新故障.
 
-## 历史波动区间 (R437-R476)
-R437=85.0 → ... → R467=44.4 → R468-R472=44.4 → R473-R476=0.0% (30min 低谷, 6h 视角 75.0%)
+## 历史波动区间 (R437-R477)
+R437=85.0 → ... → R467=44.4 → R468-R472=44.4 → R473-R477=0.0% (30min 低谷, 6h 视角 75.0%)
 
 ## 判稳
 - cc2 0 流量 → 无评估样本, 改前无数据 (铁律1 不满足), 不动码.
-- 错误类型仅 all_tiers_exhausted ×6 (sub=all_tiers_failed_in_mapped_tier), 模式与 R268-R475 一致 (170+ 轮), 无新错误.
-- dsv4p_nv 30min SR=0% 是低谷窗口, 但 6h SR=75% 仍处 46-85% 历史波动区间, 属稳态周期性行为.
+- 错误类型仅 all_tiers_exhausted ×6 (sub=all_tiers_failed_in_mapped_tier), 模式与 R268-R476 一致 (170+ 轮), 无新错误.
+- dsv4p_nv 30min SR=0% 是低谷窗口, 6h SR=75% 仍处 46-85% 历史波动区间, 属稳态周期性行为.
 - 6×429/30min ≈ 12/h 高于 5/h 阈值, 但 per-min 趋势呈"每5min1次离散 429", 非集中爆发.
-  且 18:00 UTC 高 200 桶 (22×200) 证明 NVCF 侧可用, 当前低谷是配额周期非链路故障.
-- 本轮 6h 502=4 (低频, 18:00 UTC 1×502, 单点模式继续消退, 2h 视�� 1×502).
+  R476 记录 18:00 UTC 高 200 桶 (22×200) 证明 NVCF 侧可用, 当前低谷是配额周期非链路故障.
 - fallback 6 次 (ms_gw 兜底正常, dsv4p_nv 自恢复不够时 cc4101 层有兜底, 链路有保障).
 - 0 restart → 无需 py_compile / curl 复测.
-- 配置实测与 R475 完全一致, 无配置漂移.
-- 6h stream_total_deadline = 0, deadline 链对齐无越界.
+- 配置实测与 R475/R476 完全一致, 无配置漂移.
+- 注入数据 nv_gw "26 hours ago" 实为 nv_gw_stable Up 26h, nv_gw 本身 Up 13h (与 R476 一致, 无漂移).
 
-## 容器健康 (本轮实测 04:00)
+## 容器健康 (本轮实测 04:06)
 - curl /health: status=ok, nv_num_keys=5, nvcf_pexec_models=[kimi_nv,dsv4p_nv,glm5_2_nv], port=40006.
 - docker ps: nv_gw Up 13h, cc4101 Up 3h, nv_gw_stable Up 26h, ms_gw Up 3 days, logs_db Up 3 days.
 - 0 restart.
@@ -62,7 +49,7 @@ R437=85.0 → ... → R467=44.4 → R468-R472=44.4 → R473-R476=0.0% (30min 低
 - 关注新错误类型 (非 all_tiers_exhausted) 或 key/IP 级故障, 再决定是否介入.
 - dsv4p_nv 小时级 SR 持续 <60% + cc2 缓冲流量恢复后再评估是否切换 PRIMARY_UPSTREAM_MODEL.
 - all_tiers_exhausted 持续 >=5/h 且中段不恢复 再评估 buffer/KeyManager 参数 (TIER_COOLDOWN_S 180s 是否过激).
-- 留意 502 是否再现 (2h 1×502, 6h 4×502 低频, 再现 >=3/h 才介入).
+- 留意 502 是否再现 (R476 记 6h 4×502 低频, 再现 >=3/h 才介入).
 - 留意 cc4101 restart 后 PRIMARY_UPSTREAM_MODEL/FALLBACK 配置是否仍为 dsv4p_nv / glm5_2_ms.
 - 候选观察: dsv4p_nv 单 tier 无 ring fallback, 若 6h SR 持续 <70% 可评估增加 glm5_2_nv 为 dsv4p 失败时的 ring fallback (但当前 ms_gw 已恢复作 cc4101 层 fallback, 链路有兜底, 不急).
 
