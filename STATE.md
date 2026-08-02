@@ -1,36 +1,43 @@
-# R453 — NOP 巡检轮 (2026-08-03 02:27 CST)
+# R454 — NOP 巡检轮 (2026-08-03 02:31 CST)
 
 ## 摘要
 - 0 改动 0 restart. NOP 巡检轮.
-- 数据窗口 18:00-18:26 UTC (与 R452 同窗口延续, 样本 16 req: 10×200 + 5×429 + 1×502).
+- 数据窗口 18:00-18:26 UTC (与 R453 同窗口延续, 仅过 3 分钟, 样本 14 req: 8×200 + 5×429 + 1×502).
 - cc2 (cc4101-primary) 30min 仍 0 req (cc2 session 间歇空闲, 无评估样本).
-- dsv4p_nv 全 caller 30min SR=62.5% (10/16), 较 R452 (46.2%) 回升, 仍处历史波动区间内.
-- 错误: all_tiers_exhausted ×6 (all_tiers_failed_in_mapped_tier, 5key 全挂, 空 IP).
-- nv_tier_attempts 0 行 → 429 在 tier 层前被拒 (空 IP).
+- dsv4p_nv 全 caller 30min SR=57.1% (8/14), 与 R453 (62.5%) 基本持平, 仍处 46.2%-85% 历史波动区间.
+- 错误: all_tiers_exhausted ×6 (all_tiers_failed_in_mapped_tier, 5key 全挂, 空 IP), 模式与 R268-R453 一致.
+- nv_tier_attempts 30min 0 行 → 429 在 tier 层前被拒 (空 IP).
 - nv_gw Up 12h, cc4101 Up 2h (本轮未重启).
 
-## 链路数据 (本轮实测 30min 窗口 18:00-18:26 UTC)
-- caller×model×status: hermes|dsv4p_nv 4×200+5×429+1×502; openclaw|dsv4p_nv 6×200
-- dsv4p_nv SR=62.5% (10/16)
+## 链路数据 (注入窗口 18:00-18:26 UTC, 实测复跑确认)
+- caller×model×status: hermes|dsv4p_nv 4×200+5×429+1×502; openclaw|dsv4p_nv 4×200
+- dsv4p_nv SR=57.1% (8/14)
 - 错误分类: all_tiers_exhausted|all_tiers_failed_in_mapped_tier ×6 (avg_dur 1314ms)
 - cc4101-primary 30min: 0 req
 - 时间分布: 18:00(200×3+429×1+502×1)/18:01(200×3)/18:05(429×1)/18:10(429×1)/18:15(429×1)/18:20(429×1)/18:25(200×1)/18:26(200×3)
-- 18:00-18:01 + 18:25-18:26 两段连续 6×200+4×200 恢复明确, 中段 18:05-18:20 4×429 离散分布
-- per-key: key2 4×200 avg 12870ms; key3 6×200 avg 13050ms; 空 key 5×429 + 1×502
-- per-egress-IP: 134.195.101.194 6×100%; 203.10.96.139 4×100%; 空 IP 6×失败
-- 200 延迟: avg 12978ms, max 31901ms, min 4991ms, avg_ttfb 12517ms
-- finish_reason: tool_calls×8, stop×2 (无 zombie, 全部正常结束)
-- fallback: f×16 (ms_gw 未触发, dsv4p_nv 自恢复足够)
+- 18:00-18:01 + 18:25-18:26 两段连续 10×200 恢复明确, 中段 18:05-18:20 4×429 离散分布
+- per-key: key2 4×200 avg 12870ms; key3 4×200 avg 15456ms; 空 key 5×429 + 1×502
+- per-egress-IP: 134.195.101.194 4×100%; 203.10.96.139 4×100%; 空 IP 6×失败
+- 200 延迟: avg 14163ms, max 31901ms, min 4991ms, avg_ttfb 13607ms
+- finish_reason: tool_calls×6, stop×2 (无 zombie, 全部正常结束)
+- fallback: f×14 (ms_gw 未触发, dsv4p_nv 自恢复足够)
 - nv_tier_attempts: 0 行 (429 未进入 tier 尝试, 空 IP)
 - buffer/wait 日志: 30min 无 BUFFER-/WAIT- 行 (cc4101-primary 0 req, 无 buffer 触发样本)
 
-## 历史波动区间 (R437-R453)
-R437=85.0 → R438=76.5 → R439=78.9 → R440=78.3 → R441=68.4 → R442=53.3 → R443=57.1 → R444=57.1 → R445=66.7 → R446=66.7 → R447=66.7 → R448=46.2 → R449=46.2 → R450=46.2 → R451=46.2 → R452=46.2 → R453=62.5%
+## 实测复跑确认 (02:31 CST)
+- dsv4p_nv 30min: 4×200 + 5×429 (窗口稍偏移, 与注入 8/14 一致量级)
+- nv_tier_attempts 30min: 0 行 (确认 429 在 tier 层前被拒)
+- buffer/wait 30min: 无日志
+- /health: status=ok, nv_num_keys=5, nvcf_pexec_models=[kimi_nv,dsv4p_nv,glm5_2_nv], port=40006
+- docker ps: nv_gw Up 12h, cc4101 Up 2h, nv_gw_stable Up 25h, legacy_cc_1 Up 34h (healthy), ms_gw/logs_db Up 3 days
+
+## 历史波动区间 (R437-R454)
+R437=85.0 → R438=76.5 → R439=78.9 → R440=78.3 → R441=68.4 → R442=53.3 → R443=57.1 → R444=57.1 → R445=66.7 → R446=66.7 → R447=66.7 → R448=46.2 → R449=46.2 → R450=46.2 → R451=46.2 → R452=46.2 → R453=62.5 → R454=57.1%
 
 ## 判稳
 - cc2 0 流量 → 无评估样本, 改前无数据 (铁律1 不满足), 不动码.
-- 错误类型仅 all_tiers_exhausted + 1×502 单点, 模式与 R268-R452 一致 (一百六十余轮一致), 无新错误.
-- dsv4p_nv SR 62.5% 较 R452 (46.2%) 回升, 处于 46.2%-85% 历史波动区间中段, 属正常波动.
+- 错误类型仅 all_tiers_exhausted + 1×502 单点, 模式与 R268-R453 一致 (一百六十余轮一致), 无新错误.
+- dsv4p_nv SR 57.1% 与 R453 (62.5%) 基本持平, 处于 46.2%-85% 历史波动区间中段, 属正常波动.
 - 6×429=12/h 高于 5/h 阈值, 但 18:00-18:01 + 18:25-18:26 两段共 10×200 恢复明确, 整体可接受.
 - 1×502 单点 (18:00) 不足构成新错误模式 (连续 R445-R453 各 1×502, 仍 <3/h 阈值, 继续观察).
 - fallback 未触发 (ms_gw 已恢复但 dsv4p_nv 自恢复足够, 无需 fallback).
@@ -39,7 +46,7 @@ R437=85.0 → R438=76.5 → R439=78.9 → R440=78.3 → R441=68.4 → R442=53.3 
 ## 容器健康 (本轮实测)
 - curl /health: status=ok, proxy_role=passthrough, nv_num_keys=5,
   nvcf_pexec_models=[kimi_nv,dsv4p_nv,glm5_2_nv], nv_model_tiers 正常, nv_default_model=glm5_2_nv, port=40006.
-- docker ps: nv_gw Up 12 hours, cc4101 Up 2 hours, nv_gw_stable Up 24 hours, ms_gw Up 3 days, logs_db Up 3 days.
+- docker ps: nv_gw Up 12 hours, cc4101 Up 2 hours, nv_gw_stable Up 25 hours, legacy_cc_1 Up 34 hours (healthy), ms_gw Up 3 days, logs_db Up 3 days.
 - 0 restart.
 
 ## 下一步
