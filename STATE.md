@@ -1,47 +1,47 @@
-# R462 — NOP 巡检轮 (2026-08-03 03:30 CST)
+# R463 — NOP 巡检轮 (2026-08-03 03:35 CST)
 
 ## 摘要
 - 0 改动 0 restart. NOP 巡检轮.
-- 数据窗口 18:26-18:55 UTC (17 req: 13×200 + 4×429).
+- 数据窗口 18:30-18:55 UTC (16 req: 12×200 + 4×429).
 - cc2 (cc4101-primary) 30min 仍 0 req (cc2 session 间歇空闲, 无评估样本).
-- dsv4p_nv 全 caller 30min SR=76.5% (13/17), 较 R461 84.2% 略降, 仍处 46.2%-85% 历史波动区间, 属正常波动.
-- 错误: all_tiers_exhausted ×4 (all_tiers_failed_in_mapped_tier, 5key 全挂, 空 IP), 模式与 R268-R461 一致.
+- dsv4p_nv 全 caller 30min SR=75.0% (12/16), 较 R462 76.5% 略降, 仍处 46.2%-85% 历史波动区间, 属正常波动.
+- 错误: all_tiers_exhausted ×4 (all_tiers_failed_in_mapped_tier, 5key 全挂, 空 IP), 模式与 R268-R462 一致.
 - nv_tier_attempts 30min 0 行 → 429 在 tier 层前被拒 (空 IP).
 - nv_gw Up 12h, cc4101 Up 2h (本轮未重启).
-- 连续 9 轮无 502 (R454-R462), 单点 502 模式似已消退.
+- 连续 10 轮无 502 (R454-R463), 单点 502 模式似已消退.
 
-## 链路数据 (注入窗口 + 实测复跑 03:30 CST)
-- caller×status: hermes 13×200 + 4×429 (request_model=dsv4p_nv)
-- dsv4p_nv SR=76.5% (13/17)
+## 链路数据 (注入窗口 + 实测复跑 03:35 CST)
+- caller×status: hermes 12×200 + 4×429 (request_model=dsv4p_nv)
+- dsv4p_nv SR=75.0% (12/16)
 - 错误分类: all_tiers_exhausted|all_tiers_failed_in_mapped_tier ×4, avg_dur 1441ms
 - cc4101-primary 30min: 0 req (实测复跑 0 rows 确认)
-- per-key: key2 13×200 (avg 11234ms); 空 key 4×429
-- per-egress-IP: 203.10.96.139 13×100%; 空 IP 4×失败
-- 200 延迟: avg 11234ms, max 24167ms, min 4735ms, avg_ttfb 10875ms
-- finish_reason: tool_calls×10, stop×3 (无 zombie, 全部正常结束)
-- fallback: f×17 (ms_gw 未触发, dsv4p_nv 自恢复足够)
+- per-key: key2 12×200 (avg 10367ms); 空 key 4×429
+- per-egress-IP: 203.10.96.139 12×100%; 空 IP 4×失败
+- 200 延迟: avg 10367ms, max 24167ms, min 4735ms, avg_ttfb 10048ms
+- finish_reason: tool_calls×10, stop×2 (无 zombie, 全部正常结束)
+- fallback: f×16 (ms_gw 未触发, dsv4p_nv 自恢复足够)
 - nv_tier_attempts: 0 行 (429 未进入 tier 尝试, 空 IP)
-- per-min 趋势: 18:26(200×1)/18:30(429×1)/18:35(200×1)/18:36(200×4)/18:40(200×1)/18:41(200×5)/18:42(200×1)/18:45(429×1)/18:50(429×1)/18:55(429×1)
-- 18:35-18:42 连续 9×200 恢复明确, 末段离散 3×429 (18:45/18:50/18:55, 每5min1次)
+- per-min 趋势: 18:30(429×1)/18:35(200×1)/18:36(200×4)/18:40(200×1)/18:41(200×5)/18:42(200×1)/18:45(429×1)/18:50(429×1)/18:55(429×1)
+- 18:35-18:42 连续 12×200 恢复明确, 末段离散 3×429 (18:45/18:50/18:55, 每5min1次)
 - buffer/wait 日志: 30min 无 BUFFER-/WAIT- 行 (cc4101-primary 0 req, 无 buffer 触发样本)
 
-## 实测复跑确认 (03:30 CST)
+## 实测复跑确认 (03:35 CST)
 - nv_requests cc4101-primary 30min: 0 rows (确认 cc2 0 流量)
-- nv_requests 全 caller 30min: 12×200 + 4×429 (与注入 17 req 一致, 1×200 已滑出窗口)
-- error_type 30min: all_tiers_exhausted ×4 (唯一类型)
+- nv_requests dsv4p_nv 30min: 12×200 + 4×429 (与注入一致)
+- nv_requests 全 caller 错误 30min: all_tiers_exhausted ×4 (唯一类型)
 - nv_tier_attempts 30min: 0 rows (确认 429 在 tier 层前被拒)
 - /health: status=ok, nv_num_keys=5, nvcf_pexec_models=[kimi_nv,dsv4p_nv,glm5_2_nv], port=40006
 - docker ps: nv_gw Up 12h, cc4101 Up 2h, nv_gw_stable Up 25h, ms_gw Up 3 days
 
-## 历史波动区间 (R437-R462)
-R437=85.0 → R438=76.5 → R439=78.9 → R440=78.3 → R441=68.4 → R442=53.3 → R443=57.1 → R444=57.1 → R445=66.7 → R446=66.7 → R447=66.7 → R448=46.2 → R449=46.2 → R450=46.2 → R451=46.2 → R452=46.2 → R453=62.5 → R454=57.1 → R455=44.4 → R456=69.2 → R457=83.3 → R458=84.2 → R459=84.2 → R460=84.2 → R461=84.2 → R462=76.5%
+## 历史波动区间 (R437-R463)
+R437=85.0 → R438=76.5 → R439=78.9 → R440=78.3 → R441=68.4 → R442=53.3 → R443=57.1 → R444=57.1 → R445=66.7 → R446=66.7 → R447=66.7 → R448=46.2 → R449=46.2 → R450=46.2 → R451=46.2 → R452=46.2 → R453=62.5 → R454=57.1 → R455=44.4 → R456=69.2 → R457=83.3 → R458=84.2 → R459=84.2 → R460=84.2 → R461=84.2 → R462=76.5 → R463=75.0%
 
 ## 判稳
 - cc2 0 流量 → 无评估样本, 改前无数据 (铁律1 不满足), 不动码.
-- 错误类型仅 all_tiers_exhausted ×4, 模式与 R268-R461 一致 (一百六十余轮一致), 无新错误.
-- dsv4p_nv SR=76.5% 较 R461 略降但仍处 46.2%-85% 历史波动区间, 属正常波动.
-- 4×429=8/h 略高于 5/h 阈值, 但 18:35-18:42 连续 9×200 恢复明确, 末段 3×429 离散 (每5min1次) 非集中爆发, 整体可接受.
-- 本轮无 502 (R454-R462 连续 9 轮无 502, 单点模式似已消退, 继续观察).
+- 错误类型仅 all_tiers_exhausted ×4, 模式与 R268-R462 一致 (一百六十余轮一致), 无新错误.
+- dsv4p_nv SR=75.0% 较 R462 略降但仍处 46.2%-85% 历史波动区间, 属正常波动.
+- 4×429=8/h 略高于 5/h 阈值, 但 18:35-18:42 连续 12×200 恢复明确, 末段 3×429 离散 (每5min1次) 非集中爆发, 整体可接受.
+- 本轮无 502 (R454-R463 连续 10 轮无 502, 单点模式似已消退, 继续观察).
 - fallback 未触发 (ms_gw 已恢复但 dsv4p_nv 自恢复足够, 无需 fallback).
 - 0 restart → 无需 py_compile / curl 复测 (健康检查已做).
 
@@ -55,7 +55,7 @@ R437=85.0 → R438=76.5 → R439=78.9 → R440=78.3 → R441=68.4 → R442=53.3 
 - 关注新错误类型 (非 all_tiers_exhausted) 或 key/IP 级故障, 再决定是否介入.
 - dsv4p_nv 小时级 SR 持续 <60% + cc2 缓冲流量恢复后再评估是否切换 PRIMARY_UPSTREAM_MODEL.
 - all_tiers_exhausted 持续 >=5/h 且中段不恢复 再评估 buffer/KeyManager 参数.
-- 留意 502 是否再现 (R454-R462 连续 9 轮无 502, 再现 >=3/h 才介入).
+- 留意 502 是否再现 (R454-R463 连续 10 轮无 502, 再现 >=3/h 才介入).
 - 留意 cc4101 restart 后 PRIMARY_UPSTREAM_MODEL/FALLBACK 配置是否仍为 dsv4p_nv / glm5_2_ms.
 
 ## 参数快照 (本轮未改)
