@@ -1,41 +1,39 @@
-# R514 — NOP 巡检轮 (2026-08-03 06:20 CST)
+# R515 — NOP 巡检轮 (2026-08-03 06:10 CST)
 
 ## 摘要
-- 0 改动 0 restart. NOP 接棒巡检轮 (全新 session, 低谷窗口延续, R503-R513 同窗口周期).
+- 0 改动 0 restart. NOP 接棒巡检轮 (全新 session, 低谷窗口延续, R503-R514 同窗口周期).
 - cc2 (cc4101-primary) 30min 0 req (session 间歇空闲, 无评估样本, 铁律1 不满足 → 不动码).
-- dsv4p_nv 全 caller 30min SR=54.5% (6/11: 6×200 + 5×429), 与 R510-R513 同窗口周期性行为 (注入数据 06:01 CST 实时确认, 21:35-22:00 UTC).
-- 错误: all_tiers_exhausted ×5 (历史一致, R268 起 200+ 轮). 无 502, 无 zombie.
+- dsv4p_nv 全 caller 30min SR=54.5% (6/11: 6×200 + 5×429), 与 R510-R514 同窗口周期性行为 (实测 06:06 CST 实时确认).
+- 错误: all_tiers_exhausted ×5 (历史一致, R268 起 200+ 轮). 无 502, 无 zombie, 无新错误.
 - nv_tier_attempts 30min 0 行 (429 在 tier 层前被 KeyManager 全局冷却拦截).
-- 配置实测确认与 R475-R513 完全一致, 无漂移.
+- 配置实测确认与 R475-R514 完全一致, 无漂移.
 
-## 链路数据 (06:01 CST 注入, 21:35-22:00 UTC, 与 R510-R513 同窗口周期)
+## 链路数据 (06:06 CST 实测, 与 R510-R514 同窗口周期)
 ### 30min 窗口 (全 caller, dsv4p_nv)
-- 11 req: 6×200 (avg_dur=9609ms, max=18508, min=6168, ttfb=9438, finish=tool_calls×5/stop×1, nv_key_idx=2, egress=203.10.96.139), 5×429 (空 idx, 空 IP, avg_dur=1283ms) → SR=54.5%
-- 错误分类: all_tiers_exhausted ×5 (sub=all_tiers_failed_in_mapped_tier, avg_dur=1283ms)
-- per-min: 21:35|429, 21:40|200, 21:41|200×5, 21:45|429, 21:50|429, 21:55|429, 22:00|429 (离散, 21:40-21:41 6 连续 200)
-- per-egress-IP: 203.10.96.139|6×100%, 空 IP|5×0
-- per-key: nv_key_idx=2 (6×200); 空 idx 5×429
-- fallback: f|11 (全部 fallback, cc4101 走 ms_gw glm5_2_ms)
+- 11 req: 6×200 (avg_dur=9609ms, nv_key_idx=2, egress=203.10.96.139), 5×429 (avg_dur=1351ms) → SR=54.5%
+- 错误分类: all_tiers_exhausted ×5 (sub=all_tiers_failed_in_mapped_tier)
+- per-caller/model: hermes|dsv4p_nv|200×6, hermes|dsv4p_nv|429×5 (仅 hermes caller)
+- fallback: 11/11 全 fallback (cc4101 走 ms_gw glm5_2_ms, 链路有保障)
 
 ### cc4101-primary 专属 (cc2 的请求)
 - 30min 0 req (session 间歇空闲, 实测 0 rows)
 
 ### KeyManager 日志 (nv_gw --since 30m)
-- 实测 (无 buffer/wait/keymanager 日志), 429 在 tier 层前被 KeyManager 全局冷却拦截.
+- 实测 0 行 (无 buffer/wait/keymanager 日志), 429 在 tier 层前被 KeyManager 全局冷却拦截.
 - 单次 429 即触发全局冷却, tier=dsv4p_nv 只 1 tier 无 ring fallback → all_tiers_exhausted 直接 abort.
 - 历史一致行为 (R268 起 200+ 轮), 非本轮新故障.
 
 ## 判稳
 - cc2 0 流量 → 无评估样本, 改前无数据 (铁律1 不满足), 不动码.
-- 错误类型 all_tiers_exhausted ×5, 模式与 R268-R513 一致, 无新错误.
-- dsv4p_nv 30min SR=54.5% (与 R510-R513 同窗口周期性行为, 低谷窗口, 21:40 后 200 回升 6 连续成功).
+- 错误类型 all_tiers_exhausted ×5, 模式与 R268-R514 一致, 无新错误.
+- dsv4p_nv 30min SR=54.5% (与 R510-R514 同窗口周期性行为, 低谷窗口).
 - fallback 兜底正常 (cc4101 层走 ms_gw glm5_2_ms, 链路有保障).
 - 0 restart → 无需 py_compile / curl 复测.
-- 配置实测与 R475-R513 完全一致, 无配置漂移.
+- 配置实测与 R475-R514 完全一致, 无配置漂移.
 
-## 容器健康 (06:20 实测)
+## 容器健康 (06:06 实测)
 - curl /health: status=ok, proxy_role=passthrough, nv_num_keys=5, nvcf_pexec_models=[kimi_nv,dsv4p_nv,glm5_2_nv], port=40006.
-- docker ps: nv_gw Up 15h, cc4101 Up 5h, nv_gw_stable Up 28h, ms_gw Up 3 days, logs_db Up 3 days.
+- docker ps: nv_gw Up 16h, cc4101 Up 5h, nv_gw_stable Up 28h, ms_gw Up 3 days, logs_db Up 3 days.
 - 0 restart.
 
 ## 下一步
@@ -43,7 +41,7 @@
 - 关注新错误类型 (非 all_tiers_exhausted/zombie) 或 key/IP 级故障, 再决定是否介入.
 - dsv4p_nv 小时级 SR 持续 <60% + cc2 缓冲流量恢复后再评估是否切换 PRIMARY_UPSTREAM_MODEL 或增加 ring fallback.
 - all_tiers_exhausted 持续 >=5/h 且中段不恢复 再评估 buffer/KeyManager 参数 (TIER_COOLDOWN_S 180s 是否过激).
-- 留意 502 是否再现 (R476/R480-R513 记 6h 低频 zombie 502, 再现 >=3/h 才介入).
+- 留意 502 是否再现 (R476/R480-R514 记 6h 低频 zombie 502, 再现 >=3/h 才介入).
 - 关注 zombie_empty_completion 频次: 若 >=3/h 再评估 zombie 阈值 (当前 content+reasoning<50).
 
 ## 参数快照 (本轮未改)
