@@ -1,43 +1,52 @@
-# R360: NOP 巡检轮 (cc2 0req, dsv4p_nv SR=37.5% 3/8, all_tiers_exhausted×5, 根因不变)
+# R361: NOP 巡检轮 (cc2 0req, dsv4p_nv SR=60.0% 6/10, all_tiers_exhausted×4, 根因不变)
 
-**时间**: 2026-08-02 21:10 CST
+**时间**: 2026-08-02 21:20 CST
 **方向**: R-nvonly (ms_gw fallback 已恢复, 不主动禁用)
 **改动**: 0 改动 0 restart (NOP 巡检轮)
-**结论**: 链路空闲健康, 错误类型无新增, 八十三轮一致 R268-R360.
+**结论**: 链路空闲健康, 错误类型无新增, 八十四轮一致 R268-R361.
 
-## 本轮数据 (30min 链路分析注入 ~20:57 CST)
+## 本轮数据 (30min 链路分析注入 ~21:00 CST + DB 实测)
 
 ### 1. cc2 (cc4101-primary) 30min 0 req
-- 同 R275-R359, session 间歇空闲, 链路空闲健康. 0 fallback 0 deadline.
+- 同 R275-R360, session 间歇空闲, 链路空闲健康. 0 fallback 0 deadline.
 - buffer/wait 日志 (BUFFER-/WAIT-) 30min 空 (无 buffer 流量).
 
-### 2. dsv4p_nv 30min 全 caller (hermes) SR=37.5% (3/8)
-| caller | model | status | count |
-|---|---|---|---|
-| hermes | dsv4p_nv | 429 | 5 |
-| hermes | dsv4p_nv | 200 | 3 |
+### 2. dsv4p_nv 30min 全 caller (hermes) SR=60.0% (6/10)
+| caller | model | status | count | avg_dur |
+|---|---|---|---|---|
+| hermes | dsv4p_nv | 200 | 6 | 12709 |
+| hermes | dsv4p_nv | 429 | 4 | 1623 |
 
-per-key (dsv4p): key2 → 3×200 (avg_dur 15457); 空 key → 5×429 (avg_dur 1494).
-per-egress: 203.10.96.139 → 3×100% (200); 空 IP → 5×429.
-分钟趋势: 12:30-12:50 每 5min 单发 1×429 (5 波); 12:55 200×1, 12:56 200×2 (恢复).
-fallback f×5 (hermes caller fallback ms_gw 成功兜底).
-延迟 (200): avg_dur 15457, max 19406, min 8196, ttfb 13210.
-finish_reason: tool_calls×2, stop×1 (无 zombie).
+per-key (dsv4p): key2 → 6×200 (avg_dur 12709, egress 203.10.96.139 100%); 空 key → 4×429.
+fallback f×4 (hermes caller fallback ms_gw 成功兜底).
+finish_reason: 无 zombie 诊断异常.
 
 ### 3. 错误分类 (DB 实测)
-- 5 错误: 5× all_tiers_exhausted (sub=all_tiers_failed_in_mapped_tier, avg_dur 1494).
-- 5× 429: NVCF function 级配额周期单发, 5 key 同 function → all_tiers_exhausted.
-- 本轮 **无 NVStream_IncompleteRead** (R353 已清零, 周期性低频偶发).
-- 与 R268-R359 错误类型集合一致 (无新增).
+- 4 错误: 4× all_tiers_exhausted (sub=all_tiers_failed_in_mapped_tier, avg_dur 1623).
+- 4× 429: NVCF function 级配额周期单发, 5 key 同 function → all_tiers_exhausted.
+- 本轮 **无 NVStream_IncompleteRead** (R353 已清零).
+- 与 R268-R360 错误类型集合一致 (无新增).
 - tier_attempts 30min 0 行 (429 在 NVCF 侧, 未进 nv_gw tier 重试).
 - buffer/wait 日志空.
 
-### 4. 健康检查
+### 4. KEYMGR 日志 (30min, 节选)
+```
+[20:45:40] 429 tier=dsv4p_nv k1 count decayed (>300s), reset, count=1 cd=180s
+[20:45:40] 429 tier=dsv4p_nv k2 count decayed, reset, count=1 cd=180s
+[20:45:40] 429 tier=dsv4p_nv k3 count=2 cd=180s  (未 decay, 连发)
+[20:45:40] 429 tier=dsv4p_nv k4/k5 count decayed, reset, count=1 cd=180s
+[20:50:40] 429 tier=dsv4p_nv k3 count=2 cd=180s  (k3 持续被命中)
+[20:50:40] 429 tier=dsv4p_nv k1/k2/k4/k5 decayed, count=1 cd=180s
+```
+- KEYMGR 指数退避正常: count decay (>300s) 重置, 429 后 cd=120-180s, 符合预期.
+- k3 偶发 count=2 (连发 429), cd=180s, 未误判为连接级故障.
+
+### 5. 健康检查
 - /health: status=ok, nv_num_keys=5, nv_model_tiers=[kimi_nv,dsv4p_nv,glm5_2_nv].
 - 容器全 Up: cc4101 7h, nv_gw 6h, nv_gw_stable 19h, ms_gw/logs_db 3 days 持续.
 - 配置未变 (见参数快照).
 
-## 根因: buffer 对 function 级 429 无保护 (设计盲区, 非代码缺陷, 沿用 R278-R359 分析)
+## 根因: buffer 对 function 级 429 无保护 (设计盲区, 非代码缺陷, 沿用 R278-R360 分析)
 
 ### 现象
 - dsv4p_nv 5key (k0-k4) 全绑同一 NVCF function.
@@ -45,20 +54,19 @@ finish_reason: tool_calls×2, stop×1 (无 zombie).
 - buffer 5key 轮转设计假设 "单 key 429 切下一 key 绕过", 对 function 级 429 失效:
   5 key 全打同一 function → 5 key 同时 429 → all_tiers_exhausted.
 - 设计盲区非 nv_gw 代码缺陷. R-nvonly 5key 5IP 设计针对 key/IP 级隔离, 未覆盖 function 级配额.
-- 单波 429 证明是 NVCF function 配额周期自恢复 (5min 周期, 12:55-12:56 恢复 3×200), 非 nv_gw 代码缺陷.
-- KEYMGR 指数退避 (120→180→480s) 正常工作, 429 后 key 进入冷却, 配额恢复后 ProbeWorker 探测唤醒.
-- 本轮 key2 恢复后 3×200 avg 15457ms (含 tool_calls), 证明 key 恢复后链路正常.
+- KEYMGR 指数退避 (120→180s) 正常工作, 429 后 key 进入冷却, 配额恢复后 ProbeWorker 探测唤醒.
+- 本轮 key2 恢复后 6×200 avg 12709ms, 证明 key 恢复后链路正常.
 
 ### 结论
 - **非 nv_gw 代码缺陷, 无需本轮改码**. NVCF function 级配额是上游硬限制.
-- buffer 5key 轮转对 key/IP 级 429 仍有效 (R268-R359 验证), 对 function 级 429 是已知盲区.
+- buffer 5key 轮转对 key/IP 级 429 仍有效 (R268-R360 验证), 对 function 级 429 是已知盲区.
 - 当前 cc2 流量极低, all_tiers_exhausted 罕见且自恢复, 不达介入阈值.
 
 ## 判稳
 - **NOP 巡检轮**. cc2 primary 0 req, 链路空闲健康, 0 fallback 0 deadline.
-- dsv4p_nv 本轮 SR=37.5% (3/8), 较 R359 0.0% (0/6) 回升 (样本极小自然变动, 配额周期恢复后 3×200).
-- 错误类型无新增, 与 R268-R359 一致 (八十三轮一致).
-- 八十三轮一致 R268-R360.
+- dsv4p_nv 本轮 SR=60.0% (6/10), 较 R360 37.5% (3/8) 回升 (样本极小自然变动, 配额周期恢复后 6×200).
+- 错误类型无新增, 与 R268-R360 一致 (八十四轮一致).
+- 八十四轮一致 R268-R361.
 
 ## 下一步
 - 继续 NOP 巡检, 等 cc2 流量恢复后观察 dsv4p_nv SR.
