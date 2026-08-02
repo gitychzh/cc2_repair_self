@@ -1,25 +1,25 @@
-# R478 — NOP 巡检轮 (2026-08-03 04:10 CST)
+# R479 — NOP 巡检轮 (2026-08-03 04:15 CST)
 
 ## 摘要
 - 0 改动 0 restart. NOP 巡检轮.
-- 数据窗口 19:30-20:00 UTC (04:00 CST 注入 + 04:10 复测), 与 R475/R476/R477 同低谷窗口高度一致 (连续 4 轮锁定 0%).
+- 数据窗口 19:30-20:00 UTC (04:04 CST 注入 + 04:15 复测), 与 R475-R478 同低谷窗口高度一致 (连续 5 轮锁定 0%).
 - cc2 (cc4101-primary) 30min 0 req (cc2 session 间歇空闲, 无评估样本, 铁律1 不满足 → 不动码).
-- dsv4p_nv 全 caller 30min SR=0.0% (0/6, 全 429), 与 R475-R477 同窗口一致.
-- 错误: all_tiers_exhausted ×6 (sub=all_tiers_failed_in_mapped_tier), avg_dur 1222ms (与 R477 一致).
-- nv_tier_attempts 30min 0 行 (429 在 tier 层前被拒, 空 IP, 与 R470-R477 一致).
+- dsv4p_nv 全 caller 30min SR=0.0% (0/6, 全 429), 与 R475-R478 同窗口一致.
+- 错误: all_tiers_exhausted ×6 (sub=all_tiers_failed_in_mapped_tier), avg_dur 1153ms (R478 1222ms, −69ms 抖动).
+- nv_tier_attempts 30min 0 行 (429 在 tier 层前被拒, 空 IP, 与 R470-R478 一致).
 - fallback f=6/30min (dsv4p 全挂走 ms_gw 兜底, 链路有保障).
-- nv_gw Up 13h, cc4101 Up 3h, nv_gw_stable Up 26h, ms_gw Up 3 days (本轮未重启).
-- 配置实测确认与 R475-R477 完全一致, 无漂移.
+- nv_gw Up 14h, cc4101 Up 3h, nv_gw_stable Up 26h, ms_gw Up 3 days (本轮未重启).
+- 配置实测确认与 R475-R478 完全一致, 无漂移.
 
-## 链路数据 (04:00 CST 注入 + 04:10 复测)
+## 链路数据 (04:04 CST 注入 + 04:15 复测)
 ### 30min 窗口 (hermes caller, 全 dsv4p_nv)
-- 6×429, SR 0.0% (与 R475-R477 同窗口, R467-R478 十一轮低谷锁定)
-- 错误分类: all_tiers_exhausted ×6 (sub=all_tiers_failed_in_mapped_tier), avg_dur 1222ms
-- nv_tier_attempts: 0 行 (429 未进入 tier 尝试, 空 IP, 与 R470-R477 一致)
+- 6×429, SR 0.0% (与 R475-R478 同窗口, R467-R479 十二轮低谷锁定)
+- 错误分类: all_tiers_exhausted ×6 (sub=all_tiers_failed_in_mapped_tier), avg_dur 1153ms
+- nv_tier_attempts: 0 行 (429 未进入 tier 尝试, 空 IP, 与 R470-R478 一致)
 - fallback: 6 次 (dsv4p 全挂 → cc4101 走 ms_gw glm5_2_ms, 兜底正常)
-- per-min 趋势: 每 5min 1 次离散 429 (19:30/35/40/45/50/55 + 20:00), 非集中爆发
+- per-min 趋势: 每 5min 1 次离散 429 (19:35/40/45/50/55 + 20:00), 非集中爆发
 
-### nv_gw COOLDOWN 日志 (04:10 复测, 与注入一致)
+### nv_gw COOLDOWN 日志 (04:15 复测, 与注入一致)
 ```
 [03:35-04:00] 每 5min: [NV-COOLDOWN] tier=dsv4p_nv k3 marked cooling after 429
               → [NV-GLOBAL-COOLDOWN] all keys 429. Marking all cooling 180s (TIER_COOLDOWN)
@@ -34,23 +34,23 @@
 - tier=dsv4p_nv 只有 1 个 tier, ring 无 fallback → all_tiers_exhausted 直接 ABORT-NO-FALLBACK
 - 这是历史一致行为 (R268 起 170+ 轮), 非本轮新故障.
 
-## 历史波动区间 (R437-R478)
-R437=85.0 → ... → R467=44.4 → R468-R472=44.4 → R473-R478=0.0% (30min 低谷, 6h 视角 75.0%)
+## 历史波动区间 (R437-R479)
+R437=85.0 → ... → R467=44.4 → R468-R472=44.4 → R473-R479=0.0% (30min 低谷, 6h 视角 75.0%)
 
 ## 判稳
 - cc2 0 流量 → 无评估样本, 改前无数据 (铁律1 不满足), 不动码.
-- 错误类型仅 all_tiers_exhausted ×6 (sub=all_tiers_failed_in_mapped_tier), 模式与 R268-R477 一致 (170+ 轮), 无新错误.
+- 错误类型仅 all_tiers_exhausted ×6 (sub=all_tiers_failed_in_mapped_tier), 模式与 R268-R478 一致 (170+ 轮), 无新错误.
 - dsv4p_nv 30min SR=0% 是低谷窗口, 6h SR=75% 仍处 46-85% 历史波动区间, 属稳态周期性行为.
 - 6×429/30min ≈ 12/h 高于 5/h 阈值, 但 per-min 趋势呈"每5min1次离散 429", 非集中爆发.
   R476 记录 18:00 UTC 高 200 桶 (22×200) 证明 NVCF 侧可用, 当前低谷是配额周期非链路故障.
 - fallback 6 次 (ms_gw 兜底正常, dsv4p_nv 自恢复不够时 cc4101 层有兜底, 链路有保障).
 - 0 restart → 无需 py_compile / curl 复测.
-- 配置实测与 R475-R477 完全一致, 无配置漂移.
-- 注入数据 nv_gw "26 hours ago" 实为 nv_gw_stable Up 26h, nv_gw 本身 Up 13h (与 R477 一致, 无漂移).
+- 配置实测与 R475-R478 完全一致, 无配置漂移.
+- 注入数据 nv_gw "26 hours ago" 实为 nv_gw_stable Up 26h, nv_gw 本身 Up 14h (R478 13h, +1h 自然增长, 无漂移).
 
-## 容器健康 (本轮实测 04:10)
+## 容器健康 (本轮实测 04:15)
 - curl /health: status=ok, nv_num_keys=5, nvcf_pexec_models=[kimi_nv,dsv4p_nv,glm5_2_nv], port=40006.
-- docker ps: nv_gw Up 13h, cc4101 Up 3h, nv_gw_stable Up 26h, ms_gw Up 3 days, logs_db Up 3 days.
+- docker ps: nv_gw Up 14h, cc4101 Up 3h, nv_gw_stable Up 26h, ms_gw Up 3 days, logs_db Up 3 days.
 - 0 restart.
 
 ## 下一步
