@@ -1,47 +1,37 @@
-# STATE — cc2 (hm2) 自优化 nv_gw 链路
+# R420 — NOP 巡检轮 (2026-08-03 00:50 CST)
 
-## 当前轮: R419 NOP 巡检轮 (2026-08-03 00:39 CST)
-
-## 本轮摘要 (R419)
-- **NOP 巡检轮, 0 改动 0 restart**. cc2 (cc4101-primary) 30min 0 req (session 间歇空闲, 连续第 11 轮).
-- DB 快照 (00:39): dsv4p_nv 全 caller 30min SR=90.6% (29/32), 全来自非缓冲 caller hermes.
-  - 29×200 全 key2 + egress 203.10.96.139, avg 11314ms (ttfb 10931, max 30653, min 5153), finish tool_calls×23 + stop×6, 无 IP 归属 fail.
-  - 3×all_tiers_exhausted (avg 13041ms, 无 key/IP 归属, mapped-tier 直接失败).
-  - 2×429 (16:30/16:35 限速模式) + 1×502 (16:09 恢复期偶发).
-  - 30min fallback: f×32 (0 fallback 发生).
-  - 分钟趋势: 16:09 1×502 → 16:10-16:26 连续 17min 出 29×200 → 16:30/16:35 2×429.
+## 摘要
+- NOP 巡检轮, 0 改动 0 restart. cc2 (cc4101-primary) 30min 2 req 全 200 (session 间歇空闲).
+- DB 快照 (00:45): dsv4p_nv 全 caller 30min SR=86.4% (19/22), 全来自非缓冲 caller hermes + 2×cc2 primary.
+  - 19×200: key2×17 + key0×1 + key1×1, egress 203.10.96.139×17, avg 11460ms (ttfb 11445, max 30653, min 3279), finish tool_calls×14 + stop×5.
+  - 3×all_tiers_exhausted (avg 1769ms, 无 key/IP 归属, mapped-tier 直接失败).
+  - 3×429 (16:30/16:35/16:40 限速模式, hermes caller 非 cc2).
+  - 30min fallback: f×22 (0 fallback 发生).
+  - 分钟趋势: 16:15-16:26 连续出 17×200 → 16:30/16:35/16:40 3×429 → 16:44 恢复 2×200.
+- cc2 (cc4101-primary) 30min: 2×200 (avg 3414ms), 0 fail, 100% SR — 链路健康.
 - glm5_2_nv 30min 0 req — 无健康数据.
 - 30min nv_tier_attempts: 0 行 (无缓冲 caller 流量, 无 tier 尝试日志).
-- 错误类型无新增, 与 R268-R418 一致 (**一百四十三轮一致**).
+- 30min buffer/wait/keymanager 日志: 无 (cc2 缓冲流量极低, 2×200 直接成功不进 buffer).
+- 错误类型无新增, 与 R268-R419 一致 (**一百四十四轮一致**).
 - 链路自恢复 (ProbeWorker + KeyManager decayed reset + buffer 5key 轮转) 持测有效.
 
-## R-nvonly 核心铁律 (持续生效)
-- 只改 HM2 nv_gw (40006), 不碰 HM1, 不碰 ms_gw 源码.
-- ms_gw fallback 已恢复 (`NVU_DISABLE_MS_FALLBACK=0`, `FALLBACK_UPSTREAM=ms_gw:40007`), 不主动禁用.
-- 改前有数据, 改后必验证, 写入仓库.
-
-## dsv4p_nv SR 趋势 (近 9 轮 30min 快照, 全非缓冲 caller, cc2 0 req)
-- R409 25.0% → R410 37.5% → R411 68.4% → R412 82.8% → R413 88.2% → R414 91.4% → R416 95.3% → R417 95.3% → R418 95.3% → **R419 90.6% (29/32)** — 小幅回落, 仍在高位波动区间.
-- 仍在 NVCF function 配额波动区间, 非代码缺陷.
-- 切换判据应以小时级 SR 为准, 非 30min 小样本.
-
-## 根因: NVCF dsv4p function 429/502 波 (非代码缺陷, 沿用 R278-R418 分析)
-- 非缓冲 caller hermes mapped-tier 直接走 NVCF, function 配额瞬时空位 → 429/502 → all_tiers_exhausted.
-- 5key (k0-k4) 全绑同一 NVCF function, function 级配额耗尽时多 key 同时收 429 → all_tiers_exhausted.
-- buffer 5key 轮转设计针对 key/IP 级隔离, 对 function 级 429 是已知盲区 (非代码缺陷).
-- cc2 缓冲 caller 走 buffer 路径不走 mapped-tier, 不受影响.
-
 ## 判稳
-- **NOP 巡检轮**. cc2 primary 0 req, 链路空闲健康, 0 fallback 0 deadline.
-- dsv4p_nv 本轮快照 SR=90.6% (29/32), 较 R418 略降 4.7pp, 仍在 NVCF function 配额波动区间.
-- dsv4p 错误类型无新增, 与 R268-R418 一致 (一百四十三轮一致).
-- 切换 PRIMARY_UPSTREAM_MODEL 到 glm5_2_nv 是大改: cc2 缓冲 caller 0 req + glm5_2_nv 30min 0 req,
-  无 buffer 路径数据支撑, 0 req 窗口不满足"改前必有数据"铁律 → 暂不切.
+- **NOP 巡检轮**. cc2 primary 2/2 (100% SR), 链路健康, 0 fallback 0 deadline.
+- dsv4p_nv 本轮快照 SR=86.4% (19/22), 较 R419 (90.6%) 略降 4.2pp, 仍在 NVCF function 配额波动区间.
+- dsv4p 错误类型无新增, 与 R268-R419 一致 (一百四十四轮一致).
+- 切换 PRIMARY_UPSTREAM_MODEL 到 glm5_2_nv 是大改: cc2 缓冲 caller 2 req + glm5_2_nv 30min 0 req,
+  无 buffer 路径数据支撑, 不满足"改前必有数据"铁律 → 暂不切.
+
+## 根因 (沿用 R278-R419, 非代码缺陷)
+- 非缓冲 caller hermes mapped-tier 直接走 NVCF, function 配额瞬时空位 → 429/all_tiers_exhausted.
+- 5key (k0-k4) 全绑同一 NVCF function, function 级配额耗尽时多 key 同时收 429.
+- buffer 5key 轮转设计针对 key/IP 级隔离, 对 function 级 429 是已知盲区.
+- cc2 缓冲 caller 走 buffer 路径不走 mapped-tier, 不受影响 (本轮 2×200 直接成功).
 
 ## 下一步
 - 继续 NOP 巡检, 等 cc2 流量恢复后观察 dsv4p_nv buffer 路径行为.
 - 关注新错误类型 (非 all_tiers_exhausted) 或 key/IP 级故障, 再决定是否介入.
-- dsv4p_nv 小时级 SR 持续 <70% + cc2 缓冲流量恢复后再评估是否切换 cc4101 PRIMARY_UPSTREAM_MODEL 到 glm5_2_nv.
+- dsv4p_nv 小时级 SR 持续 <70% + cc2 缓冲流量恢复后再评估是否切换 cc4101 PRIMARY_UPSTREAM_MODEL.
 - all_tiers_exhausted 持续 >=5/h 再评估 buffer/KeyManager 参数.
 
 ## 参数快照 (本轮未改)
@@ -57,10 +47,3 @@
   UPSTREAM_TIMEOUT=130, UPSTREAM_IDLE_TIMEOUT=150
 - deadline 链: 90s/attempt × 5 = 450s buffer < 470s cc4101 < 500s SDK idle
 - settings.json: contextWindow=170000, autoCompactWindow=155000, API_TIMEOUT_MS=600000
-
-## 仓库与主机
-- hermes 仓: `~/hm_ps/hermes_improve_self` (remote gitychzh/NVForge, branch main)
-- cc2 仓: `~/cc_ps/cc2_repair_self` (remote gitychzh/cc2_repair_self, branch master)
-- 容器栈: `/opt/cc-infra` (docker-compose.yml + proxy/nv-gw/gateway/ bind-mount)
-- nv_gw 源码: `/opt/cc-infra/proxy/nv-gw/gateway/{config,upstream,handlers,db,key_manager,buffer_stream}.py`
-- peer HM1 (别碰): `opc_uname@100.109.153.83`
