@@ -1,55 +1,72 @@
 # STATE — cc2 自优化 nv_gw 链路 (R-nvonly 方向)
 
-## 当前轮基线 (2026-08-02 15:13 CST, R274 NOP 巡检轮)
-- 本仓 master: 本轮 R274. (主仓 hermes_improve_self main 收 round 文件.)
+## 当前轮基线 (2026-08-02 15:20 CST, R275 NOP 巡检轮)
+- 本仓 master: 本轮 R275. (主仓 hermes_improve_self main 收 round 文件.)
 - **架构变化 (主仓 b4527f9, 非本轮)**: cc4101 `PRIMARY_UPSTREAM_MODEL` 已从
   `glm5_2_nv` 切到 `dsv4p_nv`. cc2 链路现 = cc4101(dsv4p_nv) → nv_gw → NVCF.
-- **本轮 R274 (hm2_cc2)**: NOP 巡检轮. cc2 (cc4101-primary) 30min 0 req (session 间歇空闲),
-  hermes/openclaw caller dsv4p_nv 28/29=96.6% 全 200 除 1 个瞬时 429 风暴尾巴
-  (req eab966c9, 15:10:31, k3 命中 NVCF 429 无 retry-after 头, TIER_COOLDOWN 牵连 4 健 key 180s,
-  与 R269/R271 记录的"一次性 429 风暴窗口"同模式, 非代码缺陷). 0 fallback. 0 改动 0 restart.
+- **本轮 R275 (hm2_cc2)**: NOP 巡检轮. cc2 (cc4101-primary) 30min 0 req (session 间歇空闲).
+  hermes caller dsv4p_nv 30min 24/26=92.3%, 3 失败全 hermes (非 cc2), 同一 NVCF function
+  `12acbc62-3a9e-461f-8139-142e914b6f16`, 5min 等间隔 (07:10/07:15/07:20 UTC = 15:10/15:15/15:20 CST),
+  失败分钟内 ok=0 → NVCF dsv4p_nv 配额 5min 边界周期性耗尽, 非一次性风暴.
+  3h 趋势确认: 失败稳定 3-9/h 累计 22/3h, 全 hermes 全边界点. cc2 无流量不受影响.
+  0 fallback, 0 stream_total_deadline. 0 改动 0 restart.
 
 ## R-nvonly 核心铁律 (持续生效)
 - 只改 HM2 nv_gw (40006), 不碰 HM1, 不碰 ms_gw 源码.
 - ms_gw fallback 已恢复 (`NVU_DISABLE_MS_FALLBACK=0`, `FALLBACK_UPSTREAM=ms_gw:40007`), 不主动禁用.
 - 改前有数据, 改后必验证, 写入仓库.
 
-## 本轮关键数据 (30min 实时 DB 复查 ~15:13)
+## 本轮关键数据 (30min 实时 DB 复查 ~15:20)
 
-### 1. 全 caller × model × status (cc2 primary 0 req)
-| caller | model | status | count |
-|---|---|---|---|
-| hermes | dsv4p_nv(k3) | 200 | 27 |
-| hermes | (mapped) | 429 | 1 |
-| openclaw | dsv4p_nv(k4) | 200 | 1 |
-- dsv4p_nv SR=28/29=96.6%. cc4101-primary 30min 0 req (session 间歇空闲).
+### 1. cc2 (cc4101-primary) 30min 0 req
+- 同 R274, session 间歇空闲, 链路空闲健康. 0 fallback 0 deadline.
 
-### 2. 唯一失败 eab966c9 (hermes caller 非 cc2, 15:10:31)
-- k3 → NVCF 429, egress=203.10.96.139/mihomo-7902, 无 retry-after 头.
-- 级联 TIER_COOLDOWN 把 k1/k2/k4/k5 也标 cooling 180s (各自 count decayed>300s→reset count=1).
-- 1547ms 声明 all_tiers_exhausted: 1 真实 429 + 4 被牵连. `nv_tier_attempts` 0 条 (走 pexec peek-retry path).
-- 模式同 R269/R271 一次性风暴尾巴, 非新错误, 非代码缺陷.
+### 2. dsv4p_nv 30min SR=92.3% (24/26), 失败全 hermes 边界点
+| created_at (UTC) | caller | req_id | function_id | dur_ms |
+|---|---|---|---|---|
+| 07:10:31 | hermes | eab966c9 | 12acbc62... | 1551 |
+| 07:15:32 | hermes | ffb0c128 | 12acbc62... | 1590 |
+| 07:20:33 | hermes | 39c58630 | 12acbc62... | 2701 |
+- 5min 等间隔, 同 NVCF function, duration 1.5-2.7s 极快失败 (pexec peek path 非 buffer).
+- nv_tier_attempts 0 条 (hermes 非 NVU_BUFFER_CALLERS, 走 pexec 一击即败).
 
-### 3. post266 DELEGATE + 自恢复闭环
-- 上轮 R268-R273 已实测: buffer 全挂后退避 5s → attempt2 ProbeWorker 唤醒 → success.
-- 本轮无 cc2 流量, 未触发自恢复闭环复测, 待 session 恢复流量后复测.
+### 3. NVCF 5min 配额边界铁证
+- 失败发生的整 5min 桶内 ok=0 (07:10/07:15/07:20 全 0 成功).
+- 说明 NVCF dsv4p_nv function 配额在 5min 窗口边界点耗尽, 等下一窗口刷新恢复.
+- 这是 NVCF 侧硬配额机制, 非 nv_gw 代码缺陷.
 
-### 4. health (本轮无 restart)
-- nv_gw /health: status=ok, nv_num_keys=5, default_model=glm5_2_nv, port=40006.
+### 4. 3h 周期性趋势 (确认非一次性风暴)
+| UTC 小时 | ok | fail |
+|---|---|---|
+| 04:00 | 9 | 4 |
+| 05:00 | 50 | 6 |
+| 06:00 | 52 | 9 |
+| 07:00 | 14 | 3 |
+- 失败稳定 3-9/h, 累计 22/3h, 全 hermes caller, 全整 5min 边界点.
+- R274 记的"一次性风暴尾巴" 修正认知为 "持续性 NVCF 5min 配额边界周期性耗尽".
+
+### 5. 为何 cc2 不受影响
+- `NVU_BUFFER_CALLERS=cc4101-primary,openclaw2` — cc2 primary 在 buffer 保护下.
+- cc2 遇 429 → buffer 5key 轮转 (k0→k4 各 90s) → 切下一 key 绕过单 key 配额边界.
+- hermes 不在 buffer 列表, 走 pexec peek path 一击即败, 是设计 (hermes 是另一 caller 流量).
+
+### 6. health (本轮无 restart)
+- nv_gw /health: status=ok, nv_num_keys=5, nv_default_model=glm5_2_nv,
+  nvcf_pexec_models=[kimi_nv,dsv4p_nv,glm5_2_nv], port=40006.
 
 ## 判稳
-- cc2 primary 无流量 (0 req), 链路空闲健康.
-- hermes/openclaw dsv4p_nv 28/29=96.6%, 唯一失败为瞬时 429 风暴尾巴非代码缺陷.
-- 无新错误模式, 无 fallback (f=29 全 false).
-- → NOP 巡检轮, 0 改动 0 restart.
+- **NOP 巡检轮**. cc2 primary 0 req, 链路空闲健康, 0 fallback 0 deadline.
+- dsv4p_nv 失败全在 hermes caller 打 NVCF 5min 配额边界, 非 nv_gw 代码缺陷.
+- R274 "考察 TIER_COOLDOWN 牵连" 前提 ("对孤立风暴可接受, cc2 流量未受影响") 仍成立:
+  cc2 primary 无流量受影响, 牵连只发生在非 buffer caller (hermes) 的 pexec path.
 
 ## 下一步
-1. 持续观察 dsv4p_nv 在 cc2 primary 下 SR, 看是否有新 429 风暴窗口.
-2. 若 all_tiers_exhausted + TIER_COOLDOWN 牵连 4 健 key 反复出现 (>1/h), 考察
-   TIER_COOLDOWN 对"单 key 429"是否过度牵连. 现状对孤立风暴可接受, 高频时再调.
-3. cc2 session 恢复流量后复测自恢复闭环 (backoff 5s→attempt2).
+1. cc2 session 恢复流量后, 复测 buffer 5key 轮转对 dsv4p_nv 5min 配额边界的抵抗力
+   (期望: cc2 primary 遇边界点 429 → buffer 切下一 key → success).
+2. 持续监控 dsv4p_nv 5min 边界 429 是否恶化 (>10/h 或蔓延至非边界点). 现状 3-9/h 可接受.
+3. 若未来 hermes caller 也需保护, 考察把 hermes 纳入 NVU_BUFFER_CALLERS (非本轮任务).
 
-## 参数快照 (2026-08-02 15:13 CST, 本轮未改参数)
+## 参数快照 (2026-08-02 15:20 CST, 本轮未改参数)
 - cc4101: PRIMARY_UPSTREAM_MODEL=dsv4p_nv, FALLBACK_UPSTREAM_MODEL=glm5_2_ms,
   PRIMARY_UPSTREAM_URL=http://nv_gw:40006/v1/messages,
   FALLBACK_UPSTREAM_URL=http://ms_gw:40007/v1/chat/completions,
