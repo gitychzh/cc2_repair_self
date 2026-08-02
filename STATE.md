@@ -1,17 +1,17 @@
-# R539 — NOP 巡检轮 (2026-08-03 07:37 CST)
+# R541 — NOP 巡检轮 (2026-08-03 07:43 CST)
 
 ## 摘要
-- 0 改动 0 restart. NOP 接棒巡检轮 (延续 R525-R538 间歇空闲窗口).
+- 0 改动 0 restart. NOP 接棒巡检轮 (延续 R525-R540 间歇空闲窗口).
 - cc2 (cc4101-primary) 30min 0 req (session 间歇空闲, 无 cc2 评估样本, 铁律1 cc2 视角不满足 → 不动码).
 - dsv4p_nv 30min: 14 req SR=64.3% (9×200 + 4×429 + 1×502), 全 `hermes` caller.
-  SR 较 R538 的 64.3% 持平 (同窗口 07:34→07:37, 数据基本同源), 仍在 NVCF 侧配额波动区间 (40-65% band, R530-R538).
-- 唯一错误类型 `all_tiers_exhausted` × 5 (avg 12805ms = 12.8s), 无新错误类型.
-- 1× 502 = peer-fb-skip 已知路径 (23:17 UTC), R530-R538 同源, 非新错误.
-- NV-GLOBAL-COOLDOWN tier=dsv4p_nv 周期性 429 仍在 (23:10/23:20/23:26/23:35 UTC),
-  与 R268-R538 完全一致, NVCF 侧配额波动.
-- 无 stream_total_deadline, 无 zombie_empty_completion, 无 buffer/wait 日志 (dsv4p_nv 在 peer-fb-skip,
+  SR 与 R540 的 64.3% 完全持平 (同源 07:40→07:43 窗口延续), 仍在 NVCF 侧配额波动区间 (40-65% band, R530-R540).
+- 唯一错误类型 `all_tiers_exhausted` × 5 (avg 12823ms ≈ 12.8s), 无新错误类型.
+- 1× 502 = peer-fb-skip 已知路径 (23:17 UTC), R530-R540 同源, 非新错误.
+- NV-GLOBAL-COOLDOWN tier=dsv4p_nv 周期性 429 仍在 (23:10/23:20/23:26/23:35/23:40 UTC),
+  与 R268-R540 完全一致, NVCF 侧配额波动.
+- 无 stream_total_deadline (6h 0 行), 无 zombie_empty_completion, 无 buffer/wait 日志 (dsv4p_nv 在 peer-fb-skip,
   nv_gw 层裸返不走 buffer), deadline 链对齐 OK.
-- 配置实测与 R475-R538 完全一致, 无漂移.
+- 配置实测与 R475-R540 完全一致, 无漂移.
 
 ## 本轮改动
 - 无 (NOP). 铁律1 cc2 视角不满足 (cc2 0 流量无评估样本) → 不动码.
@@ -19,14 +19,15 @@
 ## 依据
 - cc2 30min 0 req → 无 cc2 评估样本 (铁律1 cc2 视角不满足)
 - dsv4p_nv 14 req: 9×200 (k2=9) + 4×429 (每 5min GLOBAL-COOLDOWN 180s) + 1×502 (peer-fb-skip)
-- 唯一错误类型: `all_tiers_exhausted` × 5, avg_dur=12805ms (全 NVCF 配额型, 非 nv_gw 故障)
+- 唯一错误类型: `all_tiers_exhausted` × 5, avg_dur=12823ms (全 NVCF 配额型, 非 nv_gw 故障)
 - per-key (dsv4p): k2=9×200 (8970ms avg), 其余 key 全 429
 - per-egress-IP: 203.10.96.139=9×100% SR, 其余 0 success
 - 200 finish_reason: tool_calls × 8, stop × 1 (无 zombie)
 - fallback_occurred=f × 14 (nv_gw 层 dsv4p_nv 不 fallback, cc4101 层兜底)
-- 全局冷却模式: 每 5min 1 次 NV-GLOBAL-COOLDOWN tier=dsv4p_nv all keys 429, 与 R268-R538 一致
+- 全局冷却模式: 每 5min 1 次 NV-GLOBAL-COOLDOWN tier=dsv4p_nv all keys 429, 与 R268-R540 一致
 - nv_tier_attempts 0 行 = 429 在 tier 层前被 KeyManager 全局冷却拦截, 历史一致
-- 无新错误类型, 无 stream_total_deadline, deadline 链对齐 OK
+- cc_requests 6h stream_total_deadline=0 → deadline 链对齐 OK
+- 无新错误类型, 无 stream_total_deadline → 无参数回退必要
 - 配置无漂移 → 无参数回退必要
 
 ## 验证
@@ -34,7 +35,7 @@
 - curl /health: status=ok, nv_num_keys=5, nv_default_model=glm5_2_nv,
   nvcf_pexec_models=[kimi_nv,dsv4p_nv,glm5_2_nv], port=40006
 - docker ps: nv_gw Up 17h, nv_gw_stable Up 30h, cc4101 Up 7h, ms_gw Up 3 days, logs_db Up 3 days
-- 配置实测与 R475-R538 完全一致, 无漂移
+- 配置实测与 R475-R540 完全一致, 无漂移
 
 ## Fallback 配置实测 (持续)
 - `NVU_DISABLE_MS_FALLBACK=0` (ms fallback 启用, 但只覆盖 glm5_2_nv)
