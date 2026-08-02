@@ -1,11 +1,12 @@
 # STATE — cc2 自优化 nv_gw 链路 (R-nvonly 方向)
 
-## 当前轮基线 (2026-08-02 14:55 CST, R269 NOP 巡检轮)
-- 本仓 master: 本轮 R269. (主仓 hermes_improve_self main 收 round 文件.)
+## 当前轮基线 (2026-08-02 15:05 CST, R270 NOP 巡检轮)
+- 本仓 master: 本轮 R270. (主仓 hermes_improve_self main 收 round 文件.)
 - **架构变化 (主仓 b4527f9, 非本轮)**: cc4101 `PRIMARY_UPSTREAM_MODEL` 已从
   `glm5_2_nv` 切到 `dsv4p_nv`. cc2 链路现 = cc4101(dsv4p_nv) → nv_gw → NVCF.
-- **本轮 R269 (hm2_cc2)**: NOP 巡检轮. 复核 dsv4p_nv primary 链路 post266 DELEGATE
-  修复持续生效, 新增自恢复闭环实测证据 (buffer 全挂后退避5s 第2次 attempt 成功).
+- **本轮 R270 (hm2_cc2)**: NOP 巡检轮. 复核 dsv4p_nv primary 链路 post266 DELEGATE
+  + 自恢复闭环持续生效. 上轮 R269 的 14:25-14:30 一次性 429 风暴窗口已过,
+  14:34 后连续全 200, 0 失败 0 fallback.
 - 0 改动 0 restart.
 
 ## R-nvonly 核心铁律 (持续生效)
@@ -13,36 +14,34 @@
 - ms_gw fallback 已恢复 (`NVU_DISABLE_MS_FALLBACK=0`, `FALLBACK_UPSTREAM=ms_gw:40007`), 不主动禁用.
 - 改前有数据, 改后必验证, 写入仓库.
 
-## 本轮关键数据 (30min 窗口 ~14:20-14:48 注入 + 14:55 DB 复查)
+## 本轮关键数据 (30min 窗��� ~14:30-15:00 注入 + 15:05 DB 复查)
 
-### 1. cc4101-primary (cc2) 30min — 21 req, 16 200 / 5 502
-- SR = 76% (表面), 5 个 502 全是 `all_tiers_exhausted`(2) + `buffer_exhausted`(3),
-  avg_dur≈165025ms, `fallback_occurred=f` 全部, `tiers_tried_count=0` 全部.
-- 按分钟趋势 (DB 实测): 502 集中在 06:28/06:30/06:31/06:32 UTC
-  (14:28-14:32 CST), **06:34 (14:34) 之后全 200, 0 失败**.
-- 注入摘要的 `all_tiers_failed_in_mapped_tier` 子类是 extractor 产物;
+### 1. cc4101-primary (cc2) 30min — 16 req, 11 200 / 5 502
+- 30min SR = 69% (表面), 5 个 502 全是历史窗口 14:25-14:30 的尾巴, 与 R269 同源.
+- **最近 20min (14:34-15:05) DB 实测**: 11/11 全 200, 0 失败, 0 fallback.
+  按分钟: 06:34×1, 06:35×2, 06:36×6, 06:37×2, 全 200.
+- 注入摘要的 `buffer_exhausted`/`all_tiers_exhausted` 子类是 extractor 产物;
   DB 实测 `error_subcategory` 全 NULL, 不存在新错误模式.
 
-### 2. 5 个 502 根因 = 一次性窗口 (跨 R267/R268/R269 三轮一致)
-- `nv_tier_attempts` 40min 仅 1 条 429 (k2 @06:24, 无关), 5 个 502 **零 tier
+### 2. 5 个 502 根因 = 一次性窗口 (跨 R268/R269/R270 三轮一致)
+- `nv_tier_attempts` 30min 仅 1 条 429 (k2, 无关), 5 个 502 **零 tier
   attempt** → 全 key cooling 时 buffer 直接 `execute_failed` elapsed=0s.
-- NVCF + ms_gw 同窗口 (14:26-14:30) 瞬时 429 风暴, 一次性尾部.
+- NVCF + ms_gw 同窗口 (14:26-14:30) 瞬时 429 风暴, 一次性尾部, 14:34 后消失.
 
-### 3. 自恢复链路实测生效 (本轮新证据, 日志 14:35)
+### 3. 自恢复闭环实测 (日志 14:35, 与 R269 同证据)
 - 14:35:43 NVCF 全 5key 429 → `NV-GLOBAL-COOLDOWN` 全 cooling 180s.
 - 非流式 req=3a3dd02b attempt=1 `execute_failed` elapsed=0s (全挂).
 - `NV-BUFFER-BACKOFF` 退避 5s → attempt=2 → 14:35:57 `success_thinking`
-  elapsed=6s, 200.
-- 证明 ProbeWorker 后台探测 cooling key 恢复 → set Event 唤醒 WaitQueue →
-  buffer 下次 attempt 命中已恢复 key. R-nvonly 自恢复闭环在工作.
+  elapsed=6s, 200. ProbeWorker 唤醒 WaitQueue → buffer 下次 attempt 命中恢复 key.
+- R-nvonly 自恢复闭环 (KeyManager+ProbeWorker+WaitQueue+BufferStreamSession) 在工作.
 
 ### 4. 干净窗口跨轮验证 (post266 DELEGATE 对 dsv4p_nv 持续生效)
-- 14:34 后多 req 全 200, 0 fallback, 全走 `NV-BUFFER-EXEC-DELEGATE`
+- 14:34 后多 req 全 200, 全走 `NV-BUFFER-EXEC-DELEGATE`
   (MODE_CHAIN 空委托 execute_request, integrate-first path).
-- 最近 15min (14:42-14:55): 5×200 dsv4p_nv, 0 失败, dur 1.4-7.7s.
+- 典型 dur: success_thinking 11-21s, 0 fallback.
 
 ## 判稳
-- 5 个 502 = 一次性 429 风暴窗口波动, 14:32 后全 200, 无反复, 三轮一致.
+- 5 个 502 = 上轮 429 风暴窗口的滚动 30min 尾巴, 14:34 后全 200, 无反复, 四轮一致.
 - dsv4p_nv 链路健康, post266 修复持续生效, 自恢复闭环实测通过.
 - 无新错误模式, 无需改码.
 - → NOP 巡检轮, 0 改动 0 restart.
@@ -50,11 +49,10 @@
 ## 下一步
 1. 持续观察 dsv4p_nv 在 cc2 primary 下 SR, 看是否有反复 502 窗口.
 2. 若 `all_tiers_exhausted` + 零 tier attempt 反复出现, 考察 KeyManager 全挂
-   判定是否过早. 本轮 14:35 日志显示退避 5s 后第 2 次 attempt 即成功, 说明
-   现有 backoff 间隔已足够等 ProbeWorker 唤醒, 暂无需调.
-3. 关注 dsv4p_nv 429 是否集中在特定 key/egress IP (本轮 k2/k3 各 1 次, 样本少).
+   判定是否过早. 现有 backoff 5s 已足够等 ProbeWorker 唤醒, 暂无需调.
+3. 关注 dsv4p_nv 429 是否集中在特定 key/egress IP (本轮仅 k2/k3 各 1 次, 样本少).
 
-## 参数快照 (2026-08-02 14:55 CST, 本轮未改参数)
+## 参数快照 (2026-08-02 15:05 CST, 本轮未改参数)
 - cc4101: PRIMARY_UPSTREAM_MODEL=dsv4p_nv, FALLBACK_UPSTREAM_MODEL=glm5_2_ms,
   PRIMARY_UPSTREAM_URL=http://nv_gw:40006/v1/messages,
   FALLBACK_UPSTREAM_URL=http://ms_gw:40007/v1/chat/completions,
