@@ -1,14 +1,14 @@
-# R388: NOP 巡检轮 (cc2 0req, dsv4p_nv SR=72.2% 13/18, all_tiers_exhausted×5[4×429+1×502 avg 3677ms], 一百一十二轮一致)
+# R389: NOP 巡检轮 (cc2 0req, dsv4p_nv SR=14.3% 1/7, all_tiers_exhausted×6[5×429+1×502 avg 3286ms], 一百一十三轮一致)
 
-## 当前轮基线 (2026-08-02 22:50 CST, R387 已完成, R388 待跑)
-- 本仓 master: R387 已 commit (af113d4). hermes 仓: R387 已 push (e60cca4).
+## 当前轮基线 (2026-08-02 22:50 CST, R388 已完成, R389 待跑)
+- 本仓 master: R388 已 commit (338abc8). hermes 仓: R388 已 push (ad8ba10).
 - **架构**: cc4101 `PRIMARY_UPSTREAM_MODEL=dsv4p_nv`. cc2 链路 = cc4101(dsv4p_nv) → nv_gw → NVCF.
-- **本轮 R388 (hm2_cc2)**: NOP 巡检轮. cc2 (cc4101-primary) 30min 0 req (session 间歇空闲).
-  dsv4p_nv 30min 全 caller SR=72.2% (13/18), 失败 5 = 5× all_tiers_exhausted
-  (细分 4×429 + 1×502 NVCF dsv4p function 配额瞬时空位/上游瞬时错误, 全 0 fallback 非缓冲 caller).
-  **cc2 是缓冲 caller (NVU_BUFFER_CALLERS), 走 buffer 5key 轮转路径, 不走 NV-TIER-SKIP, 不受影响.**
-  错误类型无新增 (dsv4p 仍 all_tiers_exhausted, 一百一十二轮一致 R268-R388).
-  cc2 无流量不受影响, 0 fallback 0 deadline. 0 改动 0 restart. **一百一十二轮一致 R268-R388**.
+- **本轮 R389 (hm2_cc2)**: NOP 巡检轮. cc2 (cc4101-primary) 30min 0 req (session 间歇空闲).
+  dsv4p_nv 30min 全 caller SR=14.3% (1/7), 失败 6 = 6× all_tiers_exhausted
+  (细分 5×429 + 1×502 NVCF dsv4p function 本窗口配额紧张/上游瞬时错误, 全 0 fallback 非缓冲 caller).
+  **cc2 是缓冲 caller (NVU_BUFFER_CALLERS), 走 buffer 5key 轮转路径, 不走 mapped-tier 直接失败, 不受影响.**
+  错误类型无新增 (dsv4p 仍 all_tiers_exhausted, 一百一十三轮一致 R268-R389).
+  cc2 无流量不受影响, 0 fallback 0 deadline. 0 改动 0 restart. **一百一十三轮一致 R268-R389**.
   ProbeWorker + KeyManager decayed reset 自恢复链实测有效.
 
 ## R-nvonly 核心铁律 (持续生效)
@@ -16,59 +16,62 @@
 - ms_gw fallback 已恢复 (`NVU_DISABLE_MS_FALLBACK=0`, `FALLBACK_UPSTREAM=ms_gw:40007`), 不主动禁用.
 - 改前有数据, 改后必验证, 写入仓库.
 
-## 本轮关键数据 (30min 实时链路分析注入 ~22:44 CST)
+## 本轮关键数据 (30min 实时链路分析注入 ~22:48 CST)
 
 ### 1. cc2 (cc4101-primary) 30min 0 req
 - session 间歇空闲, 链路空闲健康. 0 fallback 0 deadline.
 - buffer/wait 日志 (BUFFER-/WAIT-) 30min 空 (无 buffer 流量).
 
-### 2. dsv4p_nv 30min 全 caller SR=72.2% (13/18)
+### 2. dsv4p_nv 30min 全 caller SR=14.3% (1/7)
 | caller | model | status | count | avg_dur |
 |---|---|---|---|---|
-| hermes | dsv4p_nv | 200 | 13 | 12759 |
-| hermes | dsv4p_nv | 429 | 4 | 1916 |
+| hermes | dsv4p_nv | 200 | 1 | 18082 |
+| hermes | dsv4p_nv | 429 | 5 | 1799 |
 | hermes | dsv4p_nv | 502 | 1 | 10722 |
 
-per-key (dsv4p): key2 → 13×200 (12759); 空 key → 4×429 (1916) + 1×502 (10722).
-per-egress: 203.10.96.139 → 13× (100%); 空 → 5× (0%).
-finish_reason (200): tool_calls×11, stop×2 (无 zombie).
-分钟趋势: 14:15 200×2, 14:16 200×5, 14:17 200×4, 14:18 200×2, 14:20 429×1, 14:25 502×1,
-  14:30 429×1, 14:35 429×1, 14:40 429×1 (14:15-14:18 集中 13×200, 之后零星 5×429/502).
-延迟 (200): avg_dur 12759, max 26336, min 4352, avg_ttfb 12190, avg_in 0, avg_out 0.
-fallback f×18 (全部 false, 0 fallback).
+per-key (dsv4p): key2 → 1×200 (18082); 空 key → 5×429 (1799) + 1×502 (10722).
+  (hermes mapped to key2, mapped tier 直接失败时 key 字段为空, 设计行为.)
+per-egress: 203.10.96.139 → 1× (100%); 空 → 6× (0%).
+分钟趋势: 14:20 429×1, 14:25 502×1, 14:30 429×1, 14:35 429×1, 14:40 429×1, 14:45 429×1
+  (零星分散 6× 失败, 仅 1× 成功在早期, NVCF dsv4p function 本窗口配额紧张.)
+延迟 (200): avg_dur 18082 (单样本).
+fallback f×7 (全部 false, 0 fallback).
 
 ### 3. 错误分类 (30min)
-- 5 dsv4p 错误: 5× all_tiers_exhausted (avg 3677ms) — NVCF dsv4p function 配额瞬时空位/上游瞬时错误
-  (tier 错误明细: 4×429 + 1×502, 502 为 NVCF 上游瞬时错误归入 all_tiers_exhausted 桶).
-  - 本轮无 NV-TIER-SKIP (R387 0×, 本轮 0×, 自然波动).
-  - 429/502: NVCF dsv4p function 配额瞬时空位/上游瞬时错误, 低频偶发 (5/18=28%), 本轮占比略高
-    但绝对数量 5 仍属低频, buffer 5key 轮转 + KeyManager 指数退避自恢复.
-- dsv4p 错误类型集合与 R268-R387 一致 (all_tiers_exhausted, 无新增).
+- 6 dsv4p 错误: 6× all_tiers_exhausted (sub=`all_tiers_failed_in_mapped_tier`, avg 3286ms)
+  — NVCF dsv4p function 配额瞬时空位/上游瞬时错误.
+  - 本轮无 NV-TIER-SKIP (R388 0×, 本轮 0×, 自然波动).
+  - 429/502: NVCF dsv4p function 配额瞬时空位/上游瞬时错误, 低频偶发 (6/7=86% 本窗口占比高
+    但绝对数量 6 仍属低频, 非缓冲 caller mapped-tier 直接失败无轮转保护, 设计行为).
+- nv_tier_attempts per-key 错误分布空 — mapped tier 直接失败无实际 tier attempt.
+- dsv4p 错误类型集合与 R268-R388 一致 (all_tiers_exhausted, 无新增).
 - buffer/wait 日志空.
 
-### 4. 健康检查 (沿用 R387, 容器未重启)
+### 4. 健康检查 (沿用 R388, 容器未重启)
 - 容器全 Up: nv_gw 8h, cc4101 8h, nv_gw_stable 21h, ms_gw/logs_db 3 days.
 - /health ok: nv_num_keys=5, pexec_models=[kimi_nv, dsv4p_nv, glm5_2_nv].
 - 自恢复链 (ProbeWorker + KeyManager decayed reset + buffer 5key 轮转) 实测有效.
 
-## 根因: NVCF dsv4p function 429/502 波 (非代码缺陷, 沿用 R353-R387 分析)
+## 根因: NVCF dsv4p function 429/502 波 (非代码缺陷, 沿用 R353-R388 分析)
 - **非 nv_gw 代码缺陷, 无需本轮改码**.
 - all_tiers_exhausted (429/502): NVCF dsv4p function 配额瞬时空位/上游瞬时错误, 低频偶发,
-  buffer + KeyManager 指数退避 + ProbeWorker + decayed reset 自恢复 (R268-R387 验证).
+  buffer + KeyManager 指数退避 + ProbeWorker + decayed reset 自恢复 (R268-R388 验证).
 - 本轮无 NV-TIER-SKIP 无 stream_first_byte_timeout, 错误面收敛.
 - 当前 cc2 流量极低, 偶发错误罕见且自恢复, 不达介入阈值.
+- 本窗口 dsv4p SR 骤降 (1/7) 是 NVCF 侧配额紧张 + 样本极小 (7 req) 叠加, 非链路退化;
+  非缓冲 caller (hermes) mapped-tier 无轮转保护故 SR 直接反映 NVCF 瞬时状态,
+  cc2 缓冲 caller 走 buffer 5key 轮转故 SR 不受同影响.
 
 ## 判稳
 - **NOP 巡检轮**. cc2 primary 0 req, 链路空闲健康, 0 fallback 0 deadline.
-- dsv4p_nv 本轮 SR=72.2% (13/18), 较 R387 84.6% (22/26) 略降 (样本极小自然波动,
-  本轮成功 13 vs 22, 失败 5 vs 4, 全部非缓冲 caller, cc2 不受影响).
-  dsv4p 错误类型无新增, 与 R268-R387 一致 (一百一十二轮一致).
+- dsv4p_nv 本轮 SR=14.3% (1/7), 较 R388 72.2% (13/18) 骤降 (样本极小 + NVCF 本窗口配额紧张,
+  全部非缓冲 caller, cc2 不受影响). dsv4p 错误类型无新增, 与 R268-R388 一致 (一百一十三轮一致).
 
 ## 下一步
 - 继续 NOP 巡检, 等 cc2 流量恢复后观察 dsv4p_nv SR (cc2 走 buffer 路径, 行为可能不同于非缓冲 caller).
 - 关注是否出现新错误类型 (非 all_tiers_exhausted) 或 key/IP 级故障, 再决定是否介入.
 - all_tiers_exhausted 若从低频偶发转为持续 429/502 波 (>=5/h 持续), 再评估 buffer 轮转/KeyManager 退避参数.
-- 本轮 5/18=28% 占比略高但绝对数 5 仍低, 下一轮观察是否回归 R384-R387 的 2-4× 区间.
+- 本轮 6/7=86% 占比高但绝对数 6 仍低且全非缓冲 caller, 下一轮观察是否回归 R384-R388 的正常区间.
 
 ## 参数快照 (本轮未改, 实测注入)
 - nv_gw: NVU_DISABLE_MS_FALLBACK=0, UPSTREAM_TIMEOUT=90, TIER_TIMEOUT_BUDGET_S=180,
