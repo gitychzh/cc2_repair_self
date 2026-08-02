@@ -1,77 +1,61 @@
 # STATE — cc2 自优化 nv_gw 链路 (R-nvonly 方向)
 
-## 当前轮基线 (2026-08-02 14:30 CST, R-nvonly-post266 修复轮)
-- 本仓 master: 本轮 post266. (主仓 hermes_improve_self main 收 round 文件.)
-- **本轮 R-nvonly-post266 (hm2_cc2)**: 修复轮. 发现 buffer 拦截路径硬调
-  `_try_glm52_mode_chain` 在 NV_GLM52_MODE_CHAIN 空(设计)时必败 → 8/10 cc2 请求无谓
-  ms_gw fallback. 改 `buffer_stream._execute_and_drain`: MODE_CHAIN 空时委托
-  `execute_request` (integrate-first 健康路径).
-- 改动文件: `/opt/cc-infra/proxy/nv-gw/gateway/buffer_stream.py`
-  (备份 `buffer_stream.py.bak.R266`).
-- 已 restart nv_gw, /health ok. 功能验证待下个 cc2 流量窗口.
+## 当前轮基线 (2026-08-02 14:44 CST, R267 NOP ��检轮)
+- 本仓 master: 本轮 R267. (主仓 hermes_improve_self main 收 round 文件.)
+- **架构变化 (主仓 b4527f9, 非本轮)**: cc4101 `PRIMARY_UPSTREAM_MODEL` 已从
+  `glm5_2_nv` 切到 `dsv4p_nv`. cc2 链路现 = cc4101(dsv4p_nv) → nv_gw → NVCF.
+- **本轮 R267 (hm2_cc2)**: NOP 巡检轮. dsv4p_nv primary 切换后首次巡检 +
+  跨轮验证上轮 post266 DELEGATE 修复在 dsv4p_nv 路径下生效.
+- 0 改动 0 restart.
 
 ## R-nvonly 核心铁律 (持续生效)
 - 只改 HM2 nv_gw (40006), 不碰 HM1, 不碰 ms_gw 源码.
 - ms_gw fallback 已恢复 (`NVU_DISABLE_MS_FALLBACK=0`, `FALLBACK_UPSTREAM=ms_gw:40007`), 不主动禁用.
 - 改前有数据, 改后必验证, 写入仓库.
 
-## 本轮关键数据 (30min, 14:18 CST 注入 + 14:27 复查)
+## 本轮关键数据 (30min, 14:39 CST 注入 + 14:44 复查)
 
-### 1. cc4101-primary (cc2) 40min 窗口 — 10 req, 8 fallback
-- b6f90fbb (13:54) 200 nv-direct k2 70s ✓
-- 7cec9420 (14:16) 200 fb kidx=null 175s ✗fallback
-- 0c572fd4 (14:16) 200 fb kidx=null 195s ✗fallback
-- df4ded73 (14:17) 200 fb kidx=null 167s ✗fallback
-- f4447b2f (14:17) 200 fb kidx=null 171s ✗fallback
-- aa9e0dcf (14:20) 200 fb kidx=null 168s ✗fallback
-- 016b97bb (14:20) 200 fb kidx=null 169s ✗fallback
-- 27d7f498 (14:21) 200 nv-direct k3 5s ✓
-- 584d81fb (14:23) 200 fb kidx=null 200s ✗fallback
-- 43c72521 (14:23) 200 fb kidx=null 203s ✗fallback
-- primary 链 SR = 2/10 = 20% (表面 SR=100% 全靠 ms fallback 兜底).
+### 1. cc4101-primary (cc2) 30min — 25 req, 20 200 / 5 502
+- SR = 80% (表面), 但 5 个 502 全部集中在 14:26-14:30 CST 4 分钟窗口.
 
-### 2. 日志根因 (8 fallback 请求)
-- 全走 `NV-BUF2KEY-INTERCEPT` → `NV-BUFFER-EXEC-FAIL` 5×attempt, attempt1 elapsed=0s,
-  all_keys_exhausted=True, **无 NV-GLM52-*/NV-INTEGRATE 日志**.
-- `_try_glm52_mode_chain` (upstream.py:1378-1384): `if not modes: all_keys_exhausted=True;
-  return` — 无日志, 0s 返回.
-- `NV_GLM52_MODE_CHAIN=` (空, docker-compose.yml:97, R-nvonly-post14 设计).
-- `execute_request` (upstream.py:1706) 对 glm5_2_nv 已正确门控 (MODE_CHAIN 空跳过 mode chain),
-  但 buffer 拦截路径**无条件**调 mode chain → 必败.
-- 2 成功请求走 NV-REQ→NV-INTEGRATE (未拦截, 健康).
+### 2. 5 个 502 根因 (非代码缺陷)
+- 全是 `all_tiers_exhausted`(2) + `buffer_exhausted`(3), avg_dur=165025ms.
+- `nv_tier_attempts` 表 30min 仅 1 条无关 429 (key2), 这 5 个 502 **零 tier
+  attempt 记录** → 全 key cooling 时 buffer 5 次 attempt 直接 `execute_failed`
+  elapsed=0s, 没真正打 NVCF.
+- ms_gw fallback 同窗口也 FAIL (ms_gw 14:22-14:28 v5 全 key 429 风暴,
+  `MS-VARIANT-EXHAUSTED`).
+- 结论: NVCF + ms_gw 同窗口瞬时 429 风暴, 一次性尾部, 非反复.
 
-### 3. 其他 caller (非 cc2)
-本轮 dsv4p_nv hermes+other 38req 100% SR (非 cc2 链路, 不介入).
+### 3. 跨轮验证 post266 DELEGATE 修复 (对 dsv4p_nv 同效)
+- 14:32 CST 之后干净窗口: 11 req 全 200, 0 失败, 0 fallback, 全 `nvcf_pexec`.
+- 日志 `NV-BUFFER-EXEC-DELEGATE` 命中 4 次, 均 1 attempt 成功 (11-21s).
+- post266 buffer `_execute_and_drain` MODE_CHAIN 空委托 `execute_request` 修复
+  在 dsv4p_nv 路径下确认生效.
 
-## 健康验证 (14:30 CST, restart 后)
-| 验证项 | 结果 |
-|--------|------|
-| py_compile (ast.parse) | SYNTAX OK ✓ |
-| docker compose restart nv_gw | Started ✓ |
-| nv_gw /health | ok, passthrough, 5 keys, default glm5_2_nv ✓ |
-| docker ps | nv_gw Up, cc4101/nv_gw_stable/ms_gw/logs_db Up ✓ |
-| 配置 | NVU_DISABLE_MS_FALLBACK=0, NV_GLM52_MODE_CHAIN= (空, 不变) ✓ |
-| 功能验证 | 待下个 cc2 流量窗口 (期望 DELEGATE 命中 + fb=f + dur 5-70s) ⏳ |
-
-## 本轮改动详情
-`buffer_stream.py _execute_and_drain`:
-```python
-if NV_GLM52_MODE_CHAIN:
-    chain_result = _try_glm52_mode_chain(...)
-else:
-    _log("NV-BUFFER-EXEC-DELEGATE", ...)
-    chain_result = execute_request(self.handler, self.oai_body, _mapped, _rid, self.metrics, _chain_t_start)
-```
-+ config 导入 NV_GLM52_MODE_CHAIN.
-+ 新增 NV-BUFFER-EXEC-DELEGATE 日志.
-备份: buffer_stream.py.bak.R266. round 文件: rounds/R266_buffer_modechain_empty_delegate.md.
-
-## 参数快照 (2026-08-02 14:30 CST, 本轮未改参数, 只改 buffer_stream.py)
-- nv_gw: NVU_DISABLE_MS_FALLBACK=0, BUFFER_MAX_RETRIES=5, BUFFER_TIMEOUT_STAIRS=90,90,90,90,90, BUFFER_TOTAL_DEADLINE=450s, TIER_TIMEOUT_BUDGET=180s, TIER_COOLDOWN_S=180s, UPSTREAM_TIMEOUT=90s, KEY_COOLDOWN_S=30, NV_INTEGRATE_KEY_COOLDOWN_S=90, MIN_OUTBOUND_INTERVAL_S=10, NVU_FORCE_STREAM_UPGRADE_TIMEOUT=150, NVU_FORCE_STREAM_UPGRADE=0, NVU_BUFFER_CALLERS=cc4101-primary,openclaw2, NVU_PEER_FB_SKIP_MODELS=glm5_2_nv,dsv4p_nv, NVU_CALLER_KEY_MAP=hermes:2;openclaw:3;opencode:4, NV_GLM52_MODE_CHAIN= (空, R-nvonly-post14 设计)
-- cc4101: CC4101_STREAM_TOTAL_DEADLINE_S=470, PRIMARY_HEADER_TIMEOUT=400, UPSTREAM_TIMEOUT=130, UPSTREAM_IDLE_TIMEOUT=150, CC4101_PRIMARY_SKIP_S=30, CC4101_PRIMARY_FAIL_THRESHOLD=3, FALLBACK_UPSTREAM_URL=http://ms_gw:40007/v1/chat/completions, PRIMARY_UPSTREAM_URL=http://nv_gw:40006/v1/messages, PRIMARY_UPSTREAM_MODEL=glm5_2_nv, FALLBACK_UPSTREAM_MODEL=glm5_2_ms
+## 判稳
+- 5 个 502 = 一次性窗口波动, 14:32 后全 200, 无反复.
+- dsv4p_nv 链路 post266 修复生效, 无新错误模式.
+- → NOP 巡检轮, 0 改动 0 restart.
 
 ## 下一步
-1. 等下个 cc2 glm5_2_nv 流量窗口, 确认 NV-BUFFER-EXEC-DELEGATE 命中 + fallback_occurred=f
-   + nv_key_idx 填充 + dur 回到正常 (5-70s). 验证修复生效.
-2. 若仍 fallback, 检查 execute_request 内部是否走了 nv_breaker/big_input breaker 短路到 ms.
-3. 路由差异 (部分 cc2 请求进 buffer, 部分进 NV-REQ) 悬而未决, 待流量样本增多后定位.
+1. 持续观察 dsv4p_nv 在 cc2 primary 下 SR, 看是否有反复 502 窗口.
+2. 若 `all_tiers_exhausted` + 零 tier attempt 反复出现, 考察 KeyManager 全挂
+   判定是否过早 (buffer 应能等 ProbeWorker 唤醒后重试, 而非 0s execute_failed).
+3. 关注 dsv4p_nv 429 是否集中在特定 key/egress IP (本轮 key2 有 1 次, 样本少).
+
+## 参数快照 (2026-08-02 14:44 CST, 本轮未改参数)
+- cc4101: PRIMARY_UPSTREAM_MODEL=dsv4p_nv, FALLBACK_UPSTREAM_MODEL=glm5_2_ms,
+  PRIMARY_UPSTREAM_URL=http://nv_gw:40006/v1/messages,
+  FALLBACK_UPSTREAM_URL=http://ms_gw:40007/v1/chat/completions,
+  CC4101_STREAM_TOTAL_DEADLINE_S=470, PRIMARY_HEADER_TIMEOUT=400,
+  UPSTREAM_TIMEOUT=130, UPSTREAM_IDLE_TIMEOUT=150, CC4101_PRIMARY_SKIP_S=30,
+  CC4101_PRIMARY_FAIL_THRESHOLD=3
+- nv_gw: NVU_DISABLE_MS_FALLBACK=0, NVU_BUFFER_CALLERS=cc4101-primary,openclaw2,
+  NVU_PEER_FB_SKIP_MODELS=glm5_2_nv,dsv4p_nv, BUFFER_MAX_RETRIES=5,
+  BUFFER_TIMEOUT_STAIRS=90,90,90,90,90, BUFFER_TOTAL_DEADLINE=450s,
+  TIER_TIMEOUT_BUDGET=180s, TIER_COOLDOWN_S=180s, UPSTREAM_TIMEOUT=90s,
+  KEY_COOLDOWN_S=30, NV_INTEGRATE_KEY_COOLDOWN_S=90, MIN_OUTBOUND_INTERVAL_S=10,
+  NVU_FORCE_STREAM_UPGRADE_TIMEOUT=150, NVU_FORCE_STREAM_UPGRADE=0,
+  NVU_CALLER_KEY_MAP=hermes:2;openclaw:3;opencode:4,
+  NV_GLM52_MODE_CHAIN= (空, R-nvonly-post14 设计)
