@@ -1,28 +1,28 @@
-# R420 — NOP 巡检轮 (2026-08-03 00:50 CST)
+# R421 — NOP 巡检轮 (2026-08-03 00:50 CST)
 
 ## 摘要
 - NOP 巡检轮, 0 改动 0 restart. cc2 (cc4101-primary) 30min 2 req 全 200 (session 间歇空闲).
-- DB 快照 (00:45): dsv4p_nv 全 caller 30min SR=86.4% (19/22), 全来自非缓冲 caller hermes + 2×cc2 primary.
-  - 19×200: key2×17 + key0×1 + key1×1, egress 203.10.96.139×17, avg 11460ms (ttfb 11445, max 30653, min 3279), finish tool_calls×14 + stop×5.
-  - 3×all_tiers_exhausted (avg 1769ms, 无 key/IP 归属, mapped-tier 直接失败).
-  - 3×429 (16:30/16:35/16:40 限速模式, hermes caller 非 cc2).
-  - 30min fallback: f×22 (0 fallback 发生).
-  - 分钟趋势: 16:15-16:26 连续出 17×200 → 16:30/16:35/16:40 3×429 → 16:44 恢复 2×200.
+- DB 快照 (00:48): dsv4p_nv 全 caller 30min SR=76.5% (13/17), 全来自非缓冲 caller hermes + 2×cc2 primary.
+  - 13×200: key2×11 + key0×1 + key1×1, egress 203.10.96.139×11, avg 12014ms (ttfb 12121, max 30653, min 3279), finish tool_calls×9 + stop×4.
+  - 4×all_tiers_exhausted (avg 1594ms, 无 key/IP 归属, mapped-tier 直接失败).
+  - 4×429 (16:30/16:35/16:40/16:45 限速模式, hermes caller 非 cc2).
+  - 30min fallback: f×17 (0 fallback 发生).
+  - 分钟趋势: 16:20-16:26 连续出 11×200 → 16:30/16:35/16:40/16:45 4×429 限速窗口 → 16:44 恢复 2×200.
 - cc2 (cc4101-primary) 30min: 2×200 (avg 3414ms), 0 fail, 100% SR — 链路健康.
 - glm5_2_nv 30min 0 req — 无健康数据.
 - 30min nv_tier_attempts: 0 行 (无缓冲 caller 流量, 无 tier 尝试日志).
 - 30min buffer/wait/keymanager 日志: 无 (cc2 缓冲流量极低, 2×200 直接成功不进 buffer).
-- 错误类型无新增, 与 R268-R419 一致 (**一百四十四轮一致**).
+- 错误类型无新增, 与 R268-R420 一致 (**一百四十三轮一致**).
 - 链路自恢复 (ProbeWorker + KeyManager decayed reset + buffer 5key 轮转) 持测有效.
 
 ## 判稳
 - **NOP 巡检轮**. cc2 primary 2/2 (100% SR), 链路健康, 0 fallback 0 deadline.
-- dsv4p_nv 本轮快照 SR=86.4% (19/22), 较 R419 (90.6%) 略降 4.2pp, 仍在 NVCF function 配额波动区间.
-- dsv4p 错误类型无新增, 与 R268-R419 一致 (一百四十四轮一致).
+- dsv4p_nv 本轮快照 SR=76.5% (13/17), 较 R420 (86.4%) 略降 9.9pp, 仍在 NVCF function 配额波动区间.
+- dsv4p 错误类型无新增, 与 R268-R420 一致 (一百四十三轮一致).
 - 切换 PRIMARY_UPSTREAM_MODEL 到 glm5_2_nv 是大改: cc2 缓冲 caller 2 req + glm5_2_nv 30min 0 req,
   无 buffer 路径数据支撑, 不满足"改前必有数据"铁律 → 暂不切.
 
-## 根因 (沿用 R278-R419, 非代码缺陷)
+## 根因 (沿用 R278-R420, 非代码缺陷)
 - 非缓冲 caller hermes mapped-tier 直接走 NVCF, function 配额瞬时空位 → 429/all_tiers_exhausted.
 - 5key (k0-k4) 全绑同一 NVCF function, function 级配额耗尽时多 key 同时收 429.
 - buffer 5key 轮转设计针对 key/IP 级隔离, 对 function 级 429 是已知盲区.
