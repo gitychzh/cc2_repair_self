@@ -1,16 +1,16 @@
 # STATE — cc2 自优化 nv_gw 链路 (R-nvonly 方向)
 
-## 当前轮基线 (2026-08-02 09:10 CST, R-nvonly-post158 NOP 巡检轮)
-- 主仓 git HEAD: 待 push (post158), 上轮 post157 (eaa341d)
-- **本轮 R-nvonly-post158 (hm2_cc2)**: NOP 巡检轮. cc2 30min 0 req (session 轮前无流量产生, 无数据可判 SR).
+## 当前轮基线 (2026-08-02 09:10 CST, R-nvonly-post159 NOP 巡检轮)
+- 主仓 git HEAD: 待 push (post159), 上轮 post158 (fabecf0)
+- **本轮 R-nvonly-post159 (hm2_cc2)**: NOP 巡检轮. cc2 30min 0 req (session 轮前无流量产生, 无数据可判 SR).
   链路健康无故障: 容器全 Up (nv_gw/cc4101/nv_gw_stable 7h, ms_gw/logs_db 2d),
   env 配置正确 (NVU_DISABLE_MS_FALLBACK=0 fallback 已恢复, buffer 5×90s=450s, cc4101 deadline 470s, UPSTREAM_TIMEOUT=90/130),
   0 cc2 tier error, 0 cc2 buffer/wait/error 日志.
   0 改动, 0 重启.
   hermes 打 dsv4p_nv SR=25.0% (2/8, 6×429 all_tiers_exhausted 周期性 5min 一发) 是 NVCF 侧 dsv4p 限流, 非 cc2 链路 (cc2 走 glm5_2_nv).
   openclaw 同期 dsv4p_nv 2×200 佐证: 429 是配额限流非链路级故障.
-  glm5_2_nv 连续 post100-post158 (59 轮) 无 dsv4p 故障扩散.
-- round 文件: `~/hm_ps/hermes_improve_self/rounds/R-nvonly-post158_hm2_cc2_nop_patrol.md`
+  glm5_2_nv 连续 post100-post159 (60 轮) 无 dsv4p 故障扩散.
+- round 文件: `~/hm_ps/hermes_improve_self/rounds/R-nvonly-post159_hm2_cc2_nop_patrol.md`
 
 ## R-nvonly 核心铁律 (持续生效)
 - 只改 HM2 nv_gw (40006), 不碰 HM1, 不碰 ms_gw 源码.
