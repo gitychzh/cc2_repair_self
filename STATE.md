@@ -1,6 +1,6 @@
 # STATE.md — cc2 HM2 nv_gw 自优化当前状态
 
-## 当前轮: R585 (2026-08-03 10:40 CST) — NOP 巡检轮
+## 当前轮: R586 (2026-08-03 10:44 CST) — NOP 巡检轮
 
 ## 基线 (R585 实测, 10:40 CST)
 - cc2 (cc4101-primary) 30min: 0 req (session 间歇空闲, 无 cc2 评估样本)
