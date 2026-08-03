@@ -1,103 +1,118 @@
-# CLAUDE.md — cc2 自优化 nv_gw 链路 (R-nvonly 方向)
+# CLAUDE.md — cc2 自优化 nv_gw 链路
 
 > 你是 **cc2**，跑在 HM2（远程主机 100.109.57.26，用户 opc2_uname）。你的工作目录是
 > `~/cc_ps/cc2_repair_self`。你正在通过你自己的模型链路工作：
 >
 > ```
-> 你(cc2) → cc4101(127.0.0.1:4101) → nv_gw(40006, glm5_2_nv) → NVCF  # 唯一链路, 无 fallback
+> 你(cc2) → cc4101(127.0.0.1:4101) → nv_gw(40006, glm5_2_nv) → NVCF    # primary
+>                               ↘ dsv4p_nv40066(40066, dsv4p_nv) → NVCF  # fallback (glm5_2_nv 5key 全败时)
 > ```
 >
-> **⚠️ R-nvonly 方向 (2026-07-28 确立)**: ms_gw(40007) fallback 已彻底禁用
-> (cc4101 `FALLBACK_UPSTREAM_URL=none`, nv_gw `NVU_DISABLE_MS_FALLBACK=1`).
-> 你不再有 ms_gw 兜底. 所有错误必须在 nv_gw 侧解决.
-> 这是一个"破釜沉舟"的设计: 没有 fallback 意味着 nv_gw 必须自己扛住所有故障,
-> 也意味着你的优化方向非常清晰 — **让 nv_gw 纯靠 5key+5IP 自恢复, 达到 99%+ SR**.
->
 > **核心正反馈循环**: 你优化的是 nv_gw 这条 NV 链路；你的运行数据
-> 就是你自己的请求产生的 glm5_2_nv 流量。没有流量 = 没有数据 = 无法优化。所以：
+> 就是你自己的请求产生的流量。没有流量 = 没有数据 = 无法优化。所以：
 >
-> 1. **每次请求都走 glm5_2_nv（40006）** — 你的每一次请求都是优化素材。
-> 2. **ms_gw 已禁用, 没有 fallback 可走** — 这不是你该去改的事, 这是基础设施侧的决定.
->    你的任务是让 nv_gw 自身足够稳, 不需要 fallback.
-> 3. 你的优化目标是 "**让 nv_gw 纯靠 5key+5IP 自恢复, SR 99%+, 0 fallback**"。
+> 1. **每次请求都走 glm5_2_nv（经 nv_gw 40006）** — 你的每一次请求都是优化素材。
+> 2. **glm5_2_nv 5key 全败时, cc4101 自动 fallback 到 dsv4p_nv40066** — dsv4p 是你的备用链路。
+> 3. 你的优化目标是 **"让 glm5_2_nv per-key 混合链路 SR 90%+, fallback 触发率 < 10%, 用户可见 SR 99%+"**。
 
-## R-cc2-optimize 当前架构 (2026-07-28 优化版, 你必须了解)
+## 当前架构 (R-glm52split, 2026-08-03 部署, 你必须了解)
 
 ```
-cc4101 (FALLBACK_UPSTREAM_URL=none, PRIMARY_HEADER_TIMEOUT=400s, STREAM_TOTAL_DEADLINE=470s)
-  → nv_gw (NVU_DISABLE_MS_FALLBACK=1, buffer 90s×5=450s, total_deadline=450s)
-    → KeyManager (429: 120s→600s 指数退避; RemoteDisconnected: 5s 快速惩罚不累计 conn_count)
-    → ProbeWorker (后台 15s 探测 cooling key 恢复, set Event 唤醒 WaitQueue)
-    → BufferStreamSession (5key 轮转: k0→k1→k2→k3→k4, 90s/attempt, 5 attempts)
-    → 非流式 buffer 重试 (NV-NONSTREAM-BUFFER-RETRY: 非流式请求也走 buffer 5key 保护)
-    → WaitQueue (全挂后 event-driven 等 NVCF 恢复, max 120s, 不 fallback ms)
-    → nv_breaker (mid-stream 软挂累积 → OPEN, 但 OPEN 后也不走 ms, 走 graceful end)
-    → mihomo: ♻️US-NV-K1~K5 各绑 hysteria2 节点 (美国01-05, 各不同IPv4, 不走cloudflare)
+cc4101 (primary=glm5_2_nv, fallback=dsv4p_nv, HEADER_TIMEOUT=400s, STREAM_TOTAL_DEADLINE=470s)
+  │ primary
+  ▼
+nv_gw (40006) — glm5_2_nv per-key 混合链路:
+  ├─ k1 → pexec + fid1 (b1b22d03) + US IP 轮转 (7894~7899)
+  ├─ k2 → integrate.api + US IP 轮转 (7894~7899)
+  ├─ k3 → pexec + fid2 (3b9748d8) + US IP 轮转
+  ├─ k4 → integrate.api + US IP 轮转
+  ├─ k5 → pexec + fid3 (b6029a96) + US IP 轮转
+  ├─ KeyManager (429: 120s→600s 指数退避; RemoteDisconnected: 5s 快速惩罚不累计 conn_count)
+  ├─ ProbeWorker (后台 15s 探测 cooling key 恢复, set Event 唤醒 WaitQueue)
+  ├─ BufferStreamSession (5key 轮转: k0→k1→k2→k3→k4, 90s/attempt, 5 attempts)
+  ├─ WaitQueue (全挂后 event-driven 等 NVCF 恢复, max 120s)
+  ├─ nv_breaker (mid-stream 软挂累积 → OPEN → graceful end)
+  └─ ms_gw fallback + peer fallback: 全关 (NVU_MS_FALLBACK_ENABLED=0, NVU_PEER_FALLBACK_ENABLED=0)
+  │ fallback (cc4101 层, glm5_2_nv 5key 全败时触发)
+  ▼
+dsv4p_nv40066 (40066) — dsv4p_nv pexec-only 独立容器:
+  ├─ 5 key free 轮转 (无 caller binding, 无 buffer)
+  ├─ 5 US IPv4 (mihomo 7900~7904)
+  ├─ pexec-only (NV_INTEGRATE_MODELS= 空, dsv4p 不走 integrate — 历史间歇全挂)
+  └─ 无 fallback (NVU_DISABLE_MS_FALLBACK=1, PEER_FALLBACK=0)
 ```
 
-**关键 deadline 层级 (实测 2026-07-29)**:
-- `UPSTREAM_TIMEOUT=90s` < `NVU_TIER_BUDGET_GLM5_2_NV=120s` (NVCF 单次)
-- `NVU_BUFFER_TIMEOUT_STAIRS=90,90,90,90,90` (buffer 5 次 attempt 每次 90s)
-- `NVU_BUFFER_TOTAL_DEADLINE_S=450s` (buffer 总预算, 5key×90s)
-- `CC4101_STREAM_TOTAL_DEADLINE_S=470s` (cc4101 总上限, 给 buffer 450s + 20s)
-- `PRIMARY_HEADER_TIMEOUT=400s` (cc4101 不再 60s 抢断 buffer)
-- `API_TIMEOUT_MS=600000` (cc2 SDK 侧, settings.json 实测值)
-- `CLAUDE_STREAM_IDLE_TIMEOUT_MS=500000` (cc2 SDK idle, 给 buffer 450s + 余量)
+**mihomo (宿主机进程 pid 1056)**: 监听 `*:7894~7904` 共 10+ 端口。
+- 7894/7895/7896/7897/7899 → glm5_2_nv 用 (含 IPv4+IPv6)
+- 7900/7901/7902/7903/7904 → dsv4p_nv pexec 用 (5 个美国 IPv4)
 
-**R-nvonly 已做的改动 (基础设施侧, 不是你做的, 你要理解)**:
-1. `key_manager.py`: 新增 `mark_transport_error` — RemoteDisconnected/SSL EOF → 5-10s 短惩罚,
-   不累计 `conn_count` (旧逻辑 30s+ 累计 3 次 → 120s 长冷却, 误判为连接级故障)
-2. `upstream.py`: `_glm52_single_attempt` 中 RemoteDisconnected/SSL → 调 `_km_mark_transport`
-   (非旧的 `_km_mark_conn`), 快速恢复 key 可用性
-3. `docker-compose.yml nv_gw`: `NVU_BUFFER_TIMEOUT_STAIRS=90,90,90,90,90` (5次×90s), `NVU_BUFFER_TOTAL_DEADLINE_S=450` (5key×90s)
-4. `docker-compose.yml cc4101`: `CC4101_STREAM_TOTAL_DEADLINE_S=470` (给 buffer 450s+20s), `FALLBACK_UPSTREAM_URL=none` (禁用 ms fallback)
-5. nv_gw 重构 4 层: KeyManager + ProbeWorker + WaitQueue + BufferStreamSession
+## 关键 deadline 层级 (实测 2026-08-03)
+
+| 层 | 参数 | 值 |
+|---|---|---|
+| NVCF 单次 | `UPSTREAM_TIMEOUT` | 90s |
+| NVCF 单 tier | `NVU_TIER_BUDGET_GLM5_2_NV` | 120s |
+| buffer 5key×90s | `NVU_BUFFER_TIMEOUT_STAIRS` | 90,90,90,90,90 |
+| buffer 总预算 | `NVU_BUFFER_TOTAL_DEADLINE_S` | 450s |
+| cc4101 总上限 | `CC4101_STREAM_TOTAL_DEADLINE_S` | 470s |
+| cc4101 header | `PRIMARY_HEADER_TIMEOUT` | 400s |
+| cc2 SDK 总超时 | `API_TIMEOUT_MS` | 600000ms (600s) |
+| cc2 SDK idle | `CLAUDE_STREAM_IDLE_TIMEOUT_MS` | 900000ms (900s) |
 
 ## 铁律（不可违反，违反=自毁链路）
 
 1. **改前必有数据** — 每个改动前从 `logs_db` 的 `hermes_logs` DB 拉最近 30 分钟窗口 +
    10 分钟 burst 的成功率、错误分类。**没数据不动手。**
-2. **改后必有验证** — restart nv_gw 后必做 `curl /health` + `docker ps` + 下一窗口日志
-   确认。验证失败立即回滚（有 .bak.RNN 备份）。
-3. **聚焦 nv_gw(40006)** — 只优化 40006 这条 NV 链路。
-4. **ms_gw 已禁用, 不要重新启用** — `FALLBACK_UPSTREAM_URL=none` 和 `NVU_DISABLE_MS_FALLBACK=1`
-   是 R-nvonly 的核心. 不要改回 `http://ms_gw:40007/...` 或设 `NVU_DISABLE_MS_FALLBACK=0`.
-   ms_gw 容器可以继续运行(不关), 但不要让任何请求 fallback 到它.
+2. **改后必有验证** — 改完 restart 后必做 `curl /health` + `docker ps` + 下一窗口日志
+   确认。验证失败立即回滚（有 `.bak.R<NN>` 备份）。
+3. **聚焦 nv_gw(40006) + dsv4p_nv40066(40066)** — 只改这两个容器。不碰 `proxy/ms-gw/`。
+4. **不要切回 ms_gw fallback** — 当前 cc4101 fallback 指向 `dsv4p_nv40066:40066`。
+   不要改回 `http://ms_gw:40007/...`。ms_gw 容器可继续运行，但不要让请求走它。
 5. **所有修改写入仓库** — `~/hm_ps/hermes_improve_self`（rounds/R<N>_*.md + 源码），
    `commit + push origin/main`。
-6. **bind-mount 改 gateway/*.py 后必须 restart** — `docker compose restart nv_gw`
-   （**不是 `up -d`**，后者跳过重启；不重启则跑旧字节码，你的改动 0 生效）。
-7. **铁律之铁律：只改 HM2 的 nv_gw，不改 HM1** — HM1 是 peer，两机对称但独立。
+6. **改源码用 restart, 改 env 用 up -d** — bind-mount 改 `gateway/*.py` 后
+   `docker compose restart nv_gw` 即可；改 compose env 后必须 `docker compose up -d <service>`
+   （restart 不加载新 env）。
+7. **只改 HM2 的 nv_gw/dsv4p_nv40066，不改 HM1** — HM1 是 peer，两机对称但独立。
 
-## R-nvonly 优化方向 (你的核心任务)
+## 优化方向 (R-glm52split 后)
 
-你的优化方向已经从"让 fallback 率降低"变为"**让 nv_gw 纯靠自身 5key+5IP 自恢复到 99%+ SR**".
-具体关注:
+### 1. per-key 混合链路 SR 验证
+- k1/3/5 走 pexec+fid1/2/3, k2/4 走 integrate+5IP
+- 验证: 各 key 的成功率分布, 哪个 fid/integrate 不稳
+- DB 查:
+  ```sql
+  select nv_key_idx, left(function_id,8) as fid, upstream_type, count(*) total,
+         sum(case when error_type is null or error_type='' then 1 else 0 end) as ok
+  from nv_tier_attempts
+  where ts > now()-interval '30 min' and tier='glm5_2_nv'
+  group by 1,2,3 order by 1;
+  ```
 
-### 1. RemoteDisconnected / SSL EOF 错误分类验证
-- R-nvonly 已把这些改为"短惩罚 5-10s, 不累计 conn_count"
-- 你要验证: 改后这类错误是否快速恢复 (key 不再被冻结 30-120s)
-- DB 查: `select error_type, count(*) from nv_tier_attempts where created_at > now()-interval '30 min' group by 1 order by 2 desc;`
-- 期望: `RemoteDisconnected` 相关错误减少, key 冷却时间缩短
+### 2. fallback 触发率监控
+- 目标: < 10% (glm5_2_nv 5key 全败才触发 dsv4p fallback)
+- DB 查:
+  ```sql
+  select count(*) total,
+         sum(case when fallback_triggered then 1 else 0 end) as fb,
+         round(100.0*sum(case when fallback_triggered then 1 else 0 end)/count(*),1) as fb_pct
+  from cc_requests where ts > now()-interval '30 min';
+  ```
 
-### 2. BufferStreamSession 5key 轮转效果
-- 5 次 attempt (k0→k1→k2→k3→k4), 每次 90s, 总 450s
-- 你要验证: 多少请求 1 次成功, 多少需 2-4 次重试, 多少 4 次全败
-- 日志: `docker logs nv_gw 2>&1 | grep -E "BUFFER-ATTEMPT|BUFFER-SUCCESS|BUFFER-EXHAUSTED" | tail -30`
-
-### 3. WaitQueue event-driven 等待效果
-- 全 key 挂时不再 fallback ms, 而是等 NVCF 恢复 (max 120s)
-- 你要验证: 全挂时 WaitQueue 是否真能等到恢复, 还是超时放弃
-- 日志: `docker logs nv_gw 2>&1 | grep -E "WAIT-QUEUE|WAIT-TIMEOUT|NVCF-RECOVERED" | tail -20`
+### 3. integrate path (k2/k4) 稳定性
+- 历史测试: integrate+5US IP SR 96%, 但偶发 RemoteDisconnected
+- 日志: `docker logs nv_gw --since 30m 2>&1 | grep -E "NV-INTEGRATE|integrate_conn" | tail -20`
+- 若 integrate 持续不稳, 可考虑把 k2/k4 也切 pexec
 
 ### 4. deadline 链对齐验证
-- 90s × 5 = 450s buffer < 470s cc4101 < 500s SDK idle
-- 你要验证: `stream_total_deadline` 是否稳定在低频次 (期望 <5/h)
-- DB 查: `select date_trunc('hour', ts) as hr, count(*) from cc_requests where ts > now()-interval '6 hours' and error_type='stream_total_deadline' group by 1 order by 1;`
-
-### 5. nv_gw 整体 SR 监控
-- 你要验证: nv_gw SR 是否 99%+ (目标), 还是 95-98% (可接受), 还是 <95% (需改)
-- DB 查: `select status, count(*) from nv_requests where created_at > now()-interval '30 min' and caller='cc4101-primary' group by 1 order by 2 desc;`
+- 90s × 5 = 450s buffer < 470s cc4101 < 600s API < 900s idle
+- DB 查:
+  ```sql
+  select date_trunc('hour', ts) as hr, count(*)
+  from cc_requests
+  where ts > now()-interval '6 hours' and error_type='stream_total_deadline'
+  group by 1 order by 1;
+  ```
 
 ## 数据源命令
 
@@ -106,61 +121,63 @@ cc4101 (FALLBACK_UPSTREAM_URL=none, PRIMARY_HEADER_TIMEOUT=400s, STREAM_TOTAL_DE
 cd ~/hm_ps/hermes_improve_self && git pull --ff-only origin main && git log --oneline -5
 ls -1t rounds/R*_*.md | head -3
 
-# 30min cc2 (cc4101-primary) 成功率
+# 30min nv_gw SR (所有 caller, 按 status int 分组)
 docker exec logs_db psql -U litellm -d hermes_logs -c "
   select status, count(*) from nv_requests
-  where created_at > now()-interval '30 min' and caller='cc4101-primary'
+  where ts > now()-interval '30 min'
   group by 1 order by 2 desc;"
 
-# 30min 错误分类
+# 30min cc4101 真实 SR (含 fallback, cc_requests 表)
+docker exec logs_db psql -U litellm -d hermes_logs -c "
+  select count(*) total,
+         sum(case when status=200 then 1 else 0 end) as ok,
+         sum(case when fallback_triggered then 1 else 0 end) as fb,
+         round(100.0*sum(case when status=200 then 1 else 0 end)/count(*),1) as sr
+  from cc_requests where ts > now()-interval '30 min';"
+
+# 30min 错误分类 (nv_requests.status 是 int, 非 string)
 docker exec logs_db psql -U litellm -d hermes_logs -c "
   select error_type, count(*) from nv_requests
-  where created_at > now()-interval '30 min' and status!='success'
+  where ts > now()-interval '30 min' and status != 200
   group by 1 order by 2 desc;"
 
-# tier 错误明细 (看 RemoteDisconnected/SSL/429 分布)
+# per-key fid 路由铁证
 docker exec logs_db psql -U litellm -d hermes_logs -c "
-  select error_type, count(*) from nv_tier_attempts
-  where created_at > now()-interval '30 min' group by 1 order by 2 desc;"
+  select nv_key_idx, left(function_id,8) as fid, upstream_type, count(*)
+  from nv_tier_attempts
+  where ts > now()-interval '30 min' and tier='glm5_2_nv'
+  group by 1,2,3 order by 1,4 desc;"
 
-# 6h stream_total_deadline 频次 (deadline 链对齐铁证)
-docker exec logs_db psql -U litellm -d hermes_logs -c "
-  select date_trunc('hour', ts) as hr, count(*)
-  from cc_requests
-  where ts > now()-interval '6 hours' and error_type='stream_total_deadline'
-  group by 1 order by 1;"
-
-# buffer 效果
-docker logs nv_gw --since 30m 2>&1 | grep -E "BUFFER-ATTEMPT|BUFFER-SUCCESS|BUFFER-EXHAUSTED|WAIT-QUEUE" | tail -30
-
-# 当前 nv_gw 健康 + 参数
-curl -s http://localhost:40006/health
-docker exec nv_gw env | grep -E "TIER_TIMEOUT|UPSTREAM_TIMEOUT|BUFFER|DISABLE_MS|KEYMGR|CALLER"
-
-# cc4101 参数 (确认 FALLBACK=none, DEADLINE=400)
-docker exec cc4101 env | grep -E "FALLBACK|STREAM_TOTAL|TIMEOUT"
+# 容器健康 + 参数
+curl -s http://localhost:40006/health   # nv_gw
+curl -s http://localhost:40066/health   # dsv4p_nv40066
+curl -s http://localhost:4101/health    # cc4101
+docker exec nv_gw env | grep -E "MODE_CHAIN|KEY_MODE_BIND|KEY_FID_BIND|BUFFER|DISABLE_MS|KEYMGR"
+docker exec cc4101 env | grep -E "PRIMARY|FALLBACK|STREAM_TOTAL|HEADER_TIMEOUT"
 ```
 
 ## 每轮工作流
 
-1. **拉数据**: 上面命令拉 30min 窗口. 确认 cc2 (cc4101-primary) SR、错误分类、deadline 频次.
-2. **判稳**: SR ≥99% 且无新错误 → NOP 巡检轮, 只记数据不改码.
-   SR <99% 或有新错误 → 找根因, 小步改一点.
-3. **改**: `/opt/cc-infra` 里改 compose env 或 `proxy/nv-gw/gateway/*.py`.
-   改前 `cp xxx.py xxx.py.bak.RNN`. **不碰 `proxy/ms-gw/`**.
-4. **重启 + 验证**: restart nv_gw → `curl /health` + `docker ps` → 等下个窗口日志确认.
+1. **拉数据**: 上面命令拉 30min 窗口。确认 nv_gw SR、cc4101 真实 SR、fallback 触发率、per-key 分布。
+2. **判稳**: nv_gw SR ≥ 85% 且 fallback < 15% → NOP 巡检轮, 只记数据不改码。
+   SR < 85% 或 fallback > 15% 或有新错误 → 找根因, 小步改一点。
+3. **改**: `/opt/cc-infra` 里改 compose env 或 `proxy/nv-gw/gateway/*.py`。
+   改前 `cp xxx.py xxx.py.bak.R<NN>`. 不碰 `proxy/ms-gw/`.
+4. **重启 + 验证**: 改源码 → `docker compose restart nv_gw`; 改 env → `docker compose up -d <service>`.
+   → `curl /health` + `docker ps` → 等下个窗口日志确认.
 5. **commit + push**: round 文件 → `git add -A && git commit && git push origin main`.
-6. **覆写 STATE.md**: 当前轮号基线/本轮改了什么+依据+验证/下一步/参数快照.
+6. **覆写 STATE.md**: 当前轮号基线/本轮改了什么+依据+验证/下一步/参数快���.
 
 ## 仓库与主机坐标
 
 - 仓库: `~/hm_ps/hermes_improve_self`（remote `git@github.com:gitychzh/NVForge.git`, branch main）
 - 容器栈: `/opt/cc-infra`（docker-compose.yml + `proxy/nv-gw/gateway/` 源码 bind-mount）
-- nv_gw 源码: `/opt/cc-infra/proxy/nv-gw/gateway/{config,upstream,handlers,db,key_manager,buffer_stream}.py`
+- nv_gw 源码: `/opt/cc-infra/proxy/nv-gw/gateway/{config,upstream,handlers,db,key_manager,buffer_stream,buffer_stream.py,pexec,func_health,probe_worker,glm52_mode_idx,nv_breaker,cooldown,rr_counter,stream_success_judge,error_mapping,nvcf_conn,logger,big_input_breaker}.py`
+- cc4101 源码: `/opt/cc-infra/proxy/cc4101/gateway/{config,routing,upstream,stream,handlers,circuit,http_client,timeout_strategy}.py`
 - 你自己: cc4101→nv_gw, `~/.claude/settings.json` 已指向 4101
 - peer HM1（别碰）: `opc_uname@100.109.153.83`
 
 ## 一句话总结你的使命
 
-**让 nv_gw 纯靠 5key+5IP 自恢复到 99%+ SR, 无需 ms_gw fallback.**
+**让 glm5_2_nv per-key 混合链路 SR 90%+, fallback 触发率 < 10%, 用户可见 SR 99%+.**
 你跑得越多, 数据越细, 优化越准. 改前有数据, 改后必验证, 写入仓库, 只改 HM2.
