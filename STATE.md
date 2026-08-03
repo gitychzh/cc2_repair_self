@@ -1,29 +1,31 @@
-# R565 — NOP 巡检轮 (2026-08-03 09:05 CST)
+# R566 — NOP 巡检轮 (2026-08-03 09:12 CST)
 
 ## 摘要
-- 0 改动 0 restart. NOP 接棒巡检轮 (延续 R525-R564 间歇空闲窗口).
+- 0 改动 0 restart. NOP 接棒巡检轮 (延续 R525-R565 间歇空闲窗口).
 - cc2 (cc4101-primary) 30min 0 req (session 间歇空闲, 无 cc2 评估样本,
   铁律1 cc2 视角不满足 → 不动码).
-- dsv4p_nv 30min: 14 req, 9×200 + 5×429 (SR≈64.3%, 全 `hermes` caller).
-  与 R564 (9×200+5×429) / R563 (8×200+5×429) 一致量级, 9×200 聚集在 00:51-00:52
-  命中配额空隙, avg_dur=10514ms 稳定, 仍在 NVCF 配额波动区间, 非 nv_gw 侧新故障.
-- 唯一错误类型 `all_tiers_exhausted` × 5 (avg_dur=1893ms, 与 R564 的 1893ms /
-  R563 的 1296ms 同量级 — KeyManager 全局冷却在 tier 层前拦截,
+- dsv4p_nv 30min: 17 req, 12×200 + 5×429 (SR≈70.6%, 全 `hermes` caller).
+  与 R565 (9×200+5×429) / R564 (9×200+5×429) 一致量级略升, 12×200 聚集在 00:51-01:06
+  命中配额空隙, avg_dur=9175ms 稳定 (max=25392ms), 仍在 NVCF 配额波动区间, 非 nv_gw 侧新故障.
+- 唯一错误类型 `all_tiers_exhausted` × 5 (avg_dur=2916ms, 与 R565 的 1893ms /
+  R564 的 1893ms 同量级 — KeyManager 全局冷却在 tier 层前拦截,
   tier_attempts 0 行, 历史一致).
-- 周期性 GLOBAL-COOLDOWN 180s 每 5min 1 次共 5 次 (00:35/00:40/00:45/00:55/01:01),
-  与 R268-R564 完全一致.
+- 周期性 GLOBAL-COOLDOWN 180s 每 5min 1 次 (00:40/00:45/00:55/01:01/01:06),
+  与 R268-R565 完全一致.
 - 无 stream_total_deadline, 无 zombie_empty_completion, 无 buffer/wait 日志
   (dsv4p_nv 在 peer-fb-skip, nv_gw 层裸返不走 buffer), deadline 链对齐 OK.
-- 配置实测与 R475-R564 完全一致, 无漂移.
+- 配置实测与 R475-R565 完全一致, 无漂移.
 
 ## 本轮改动
 - 无 (NOP). 铁律1 cc2 视角不满足 (cc2 0 流量无评估样本) → 不动码.
 
 ## 依据
 - cc2 30min 0 req → 无 cc2 评估样本 (铁律1 cc2 视角不满足)
-- dsv4p_nv 14 req: 9×200 + 5×429 (每 5min GLOBAL-COOLDOWN 180s 全挂, 末段配额空隙)
-- 唯一错误类型: `all_tiers_exhausted` × 5, avg_dur=1893ms (全 NVCF 配额型, 非 nv_gw 故障)
+- dsv4p_nv 17 req: 12×200 + 5×429 (每 5min GLOBAL-COOLDOWN 180s 全挂, 末段配额空隙)
+- 唯一错误类型: `all_tiers_exhausted` × 5, avg_dur=2916ms (全 NVCF 配额型, 非 nv_gw 故障)
 - nv_tier_attempts 0 行 = 429 在 tier 层前被 KeyManager 全局冷却拦截, 历史一致
+- per-key: key2=10×200, key3=2×200, 5×429 无 tier 命中 (全局冷却拦截, key 级未触发)
+- per-egress-IP: 203.10.96.139=10×200, 134.195.101.194=2×100, 5×429 无 IP 标记
 - 无新错误类型, 无 stream_total_deadline → 无参数回退必要
 - 配置无漂移 → 无参数回退必要
 
@@ -32,7 +34,7 @@
 - curl /health: status=ok, nv_num_keys=5, nv_default_model=glm5_2_nv,
   nvcf_pexec_models=[kimi_nv,dsv4p_nv,glm5_2_nv], port=40006
 - docker ps: nv_gw Up 19h, nv_gw_stable Up 31h, cc4101 Up 8h, ms_gw Up 3 days, logs_db Up 3 days
-- 配置实测与 R475-R564 完全一致, 无漂移
+- 配置实测与 R475-R565 完全一致, 无漂移
 
 ## Fallback 配置实测 (持续)
 - `NVU_DISABLE_MS_FALLBACK=0` (ms fallback 启用, 但只覆盖 glm5_2_nv)
@@ -53,9 +55,9 @@
   (c) 增加 ring fallback
 
 ## 参数快照 (本轮未改)
-- nv_gw: NVU_DISABLE_MS_FALLBACK=0, UPSTREAM_TIMEOUT=90, TIER_TIMEOUT_BUDGET_S=0,
+- nv_gw: NVU_DISABLE_MS_FALLBACK=0, UPSTREAM_TIMEOUT=90, TIER_TIMEOUT_BUDGET_S=180,
   TIER_COOLDOWN_S=180, KEY_COOLDOWN_S=30, NV_INTEGRATE_KEY_COOLDOWN_S=90,
-  MIN_OUTBOUND_INTERVAL_S=10, NVU_FORCE_STREAM_UPGRADE=0,
+  MIN_OUTBOUND_INTERVAL_S=10, NVU_FORCE_STREAM_UPGRADE=0, NVU_FORCE_STREAM_UPGRADE_TIMEOUT=150,
   NVU_BUFFER_MAX_RETRIES=5, NVU_BUFFER_CALLERS=cc4101-primary,openclaw2,
   NVU_PEER_FB_SKIP_MODELS=glm5_2_nv,dsv4p_nv, NVU_MS_FALLBACK_MODELS=glm5_2_nv,
   NVU_CALLER_KEY_MAP=hermes:2;openclaw:3;opencode:4,
