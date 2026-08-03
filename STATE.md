@@ -1,13 +1,14 @@
 # STATE.md — cc2 HM2 nv_gw 自优化当前状态
 
-## 当前轮: R610 (2026-08-03 12:42 CST) — NOP 巡检轮
+## 当前轮: R611 (2026-08-03 12:45 CST) — NOP 巡检轮
 
-## 基线 (R610 链路分析注入 + 实测复核, 12:42 CST)
+## 基线 (R611 链路分析注入 + 实测复核, 12:45 CST)
 - cc2 (cc4101-primary) 30min: 0 req (session 间歇空闲, 无 cc2 评估样本)
 - dsv4p_nv 30min: 17 req, 14×200 + 2×429 + 1×502 (SR=82.4%, hermes caller)
-  - vs R609 90.9% vs R608 87.5% vs R607 84.6% vs R606 85.2% vs R605 85.2% vs R604 84.6% vs R603 84.6% vs R602 76.2% vs R601 66.7% vs R600 61.5% vs R599 45.5% → 波动区间, NVCF 配额型
+  - vs R610 82.4% (完全一致, 同一 30min 窗口复测) vs R609 90.9% vs R608 87.5% vs R607 84.6% vs R606 85.2% vs R605 85.2% vs R604 84.6% vs R603 84.6% vs R602 76.2% vs R601 66.7% vs R600 61.5% vs R599 45.5% → 波动区间, NVCF 配额型
   - per-key: key2 14×200 (命中可用 key 100% 200, avg_dur=11589ms, IP 203.10.96.139)
   - 空 key 2×429 + 1×502 (全挂时 NVCF 侧拒绝, 429 avg_dur=1470ms 快速返回, 502 avg_dur=5011ms)
+  - 按分钟趋势: 04:16|429 04:21|429 04:26-04:37|200×14 04:41|502 (与 R610 完全重合)
 - 唯一错误 `all_tiers_exhausted` ×3 (avg_dur=2650ms, vs R608 12552ms 大幅下降)
   - 下降原因: ABORT-NO-FALLBACK 快速返回 (dsv4p_nv 跳 peer/ms fb 后快速 abort, 不再慢等)
   - NVCF 配额型, 非 nv_gw tier 故障
@@ -15,7 +16,7 @@
 - 无 buffer/wait 日志 (30min 无 buffer 触发), 无 stream_total_deadline, 无 zombie
 - finish_reason: tool_calls×11 + stop×3 (健康, 无 zombie stop)
 - fallback 发生率 f×17 (cc4101 层 ms_gw 兜底, 预期)
-- 配置与 R472-R609 完全一致, 无漂移
+- 配置与 R472-R610 完全一致, 无漂移
 
 ## 本轮改动
 - 无 (NOP). 铁律1 cc2 视角不满足 (0 流量) → 不动码.
@@ -28,7 +29,7 @@
 - all_tiers_exhausted avg_dur 2650ms (vs R608 12552ms) 下降 = ABORT 快速返回, 仍 NVCF 配额型, 非 nv_gw tier 故障
 - 502 avg_dur 5011ms ×1 (vs R608 34716ms ↓) = peer-fb-skip 快速返回, 全挂时 NVCF 侧快拒绝
 - 无新错误类型, 无参数漂移 → 无介入必要
-- 本轮 SR=82.4% vs R609 90.9% 波动区间内, 与 R545-R609 同一 NVCF 配额波动模式
+- 本轮 SR=82.4% vs R610 82.4% 完全一致 (同窗口复测), 与 R545-R610 同一 NVCF 配额波动模式
 
 ## 验证
 - 0 restart → 无需 py_compile / curl 复测
@@ -36,7 +37,7 @@
   - nv_gw: Up 35 hours (R609 时 35h, 持平)
   - cc4101: Up 22 hours (R609 时 22h, 持平)
   - nv_gw_stable: 长稳 | ms_gw/logs_db: 长稳
-- 配置与 R472-R609 完全一致, 无漂移
+- 配置与 R472-R610 完全一致, 无漂移
 
 ## 下一步
 - 继续 NOP 巡检, 等 cc2 流量恢复后观察 dsv4p_nv buffer 路径行为
@@ -45,7 +46,7 @@
 - all_tiers_exhausted 中段不恢复再评估 (当前 ~3/30min 全 NVCF 配额型)
 - 502 (peer-fb-skip) >=6/h + cc2 流量恢复 → 评估 dsv4p_nv fallback 策略
 
-## 参数快照 (R610 未改)
+## 参数快照 (R611 未改)
 - nv_gw: NVU_DISABLE_MS_FALLBACK=0, UPSTREAM_TIMEOUT=90, TIER_TIMEOUT_BUDGET_S=180,
   TIER_COOLDOWN_S=180, KEY_COOLDOWN_S=30, NV_INTEGRATE_KEY_COOLDOWN_S=90,
   MIN_OUTBOUND_INTERVAL_S=10, NVU_FORCE_STREAM_UPGRADE=0, NVU_FORCE_STREAM_UPGRADE_TIMEOUT=150,
