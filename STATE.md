@@ -1,41 +1,42 @@
-# R652 — NOP 巡检轮 (2026-08-03 15:40 CST)
+# R653 — NOP 巡检轮 (2026-08-03 15:41 CST)
 
 ## 本轮改了什么 + 依据 + 验证
-- **改动**: 无代码改动 (NOP). 仅数据巡检 + R651 既定阈值复核.
-- **依据 (实测 30min DB 15:10-15:40 CST + 150min 回查)**:
+- **改动**: 无代码改动 (NOP). 仅数据巡检 + R651 既定阈值复核 (R652→R653 第三轮复核).
+- **依据 (实测 30min DB ~15:10-15:41 CST + 150min 回查)**:
   - cc2 (cc4101-primary/glm5_2_nv) 30min: 16 req = 15×200 + 1×502 (SR=93.8%)
     - 502 = NVAnthCollect_IncompleteRead, request_id=`c1297569`, 34384ms, 07:20:50 UTC
-  - **150min 回查 (R651 既定阈值复核)**:
-    - `where error_type='NVAnthCollect_IncompleteRead'` → **仍只 1 行 (c1297569, hits=1)**
-    - 与 R651 回查结果完全一致 → 同一请求跨窗口回放, 未出现第 2 个独立 request_id
-    - **R651 阈值 (150min >= 2 个不同 request_id) 未触发, 不改 collect 重试逻辑**
-  - dsv4p_nv (hermes caller) 30min: 18 req 14×200+4×429 (SR=77.8%, 配额型, 与 R651 的 70.6% 同区间)
-  - cc4101-fallback 1 次 (dsv4p_nv 200) — primary 路径 1 次 502 触发 cc4101 侧 fallback, fallback 链路健康
+  - **150min 回查 (R651 既定阈值复核, 第三轮)**:
+    - `where error_type='NVAnthCollect_IncompleteRead'` → **仍只 1 行 (c1297569, hits=1, 07:20:50)**
+    - min=max=07:20:50 → 单次事件, 非跨窗口回放增长
+    - 与 R651/R652 三轮复核完全一致 → **R651 阈值 (150min >= 2 个不同 request_id) 未触发, 不改 collect 重试逻辑**
+  - dsv4p_nv (hermes caller) 30min: 15 req 11×200+4×429 (SR=73.3%, 配额型, 与 R652 的 77.8% 同区间)
+    - all_tiers_exhausted ×4 (5key 全 429→TIER_COOLDOWN 180s), NVCF 无 retry-after 头
+  - cc4101-fallback 1 次 (dsv4p_nv 200) — primary 路径 1 次 502 触发 fallback, fallback 链路健康
 - **tier 层健康**: pexec_success×12 + integrate_success×4 (key 持续可用); RemoteDisconnected×8 (integrate_conn×6 k1/k3 + pexec_conn×2 k2/k4) + SSLEOFError×4 (k2/k4) 都被 mark_transport_error 5-10s 短惩罚处理, 429×1 (dsv4p 配额型)
-- **deadline 链**: 6h stream_total_deadline=0 (健康铁证, 与 R651 一致)
+- **deadline 链**: 6h stream_total_deadline=0 (健康铁证, 与 R652 一致)
 - **验证**:
   - /health ok: nv_num_keys=5, nv_default_model=glm5_2_nv, nvcf_pexec_models=[kimi_nv,dsv4p_nv,glm5_2_nv]
-  - 容器: nv_gw Up 19min, cc4101 Up 25min, dsv4p_nv40066 Up 19min, ms_gw/logs_db Up 4 days, nv_gw_stable Up 38h 备用
-  - 配置无漂移 (与 R651 快照一致): nv_gw NVU_DISABLE_MS_FALLBACK=1, buffer 5key×90s=450s, TIER_COOLDOWN=180; cc4101 PRIMARY=glm5_2_nv, FALLBACK=http://dsv4p_nv40066:40066, STREAM_TOTAL=470
+  - 容器: nv_gw Up 21min, cc4101 Up 28min, dsv4p_nv40066 Up 21min, ms_gw/logs_db Up 4 days, nv_gw_stable Up 38h 备用
+  - 配置无漂移 (与 R652 快照一致): nv_gw NVU_DISABLE_MS_FALLBACK=1, buffer 5key×90s=450s, TIER_COOLDOWN=180; cc4101 PRIMARY=glm5_2_nv, FALLBACK=http://dsv4p_nv40066:40066, STREAM_TOTAL=470
 
-## 基线 (R652 实测, 15:10-15:40 CST)
+## 基线 (R653 实测, ~15:10-15:41 CST)
 - cc2 (cc4101-primary/glm5_2_nv) 30min: 16 req, 15×200+1×502 (SR=93.8%)
-  - 对比 R651: 16 req 15×200+1×502 (SR=93.8%) → 完全持平, 同一 c1297569 跨窗口
-- dsv4p_nv (hermes) 30min: 18 req 14×200+4×429 (SR=77.8%, 配额型, R651 为 70.6%)
-- 错误分类 (cc2 路径): NVAnthCollect_IncompleteRead ×1 (c1297569, 跨窗口回放)
+  - 对比 R652: 16 req 15×200+1×502 (SR=93.8%) → 完全持平, 同一 c1297569
+- dsv4p_nv (hermes) 30min: 15 req 11×200+4×429 (SR=73.3%, 配额型, R652 为 77.8%)
+- 错误分类 (cc2 路径): NVAnthCollect_IncompleteRead ×1 (c1297569, 单次事件)
 - deadline 链: 6h stream_total_deadline=0 (健康)
 - tier 错误: RemoteDisconnected×8 + SSLEOFError×4 (k1-k4, 短惩罚), pexec_success×12, 429×1
 
-## 保护 gap 分析 (R649 既定, R651 修订阈值, R652 复核未触发)
+## 保护 gap 分析 (R649 既定, R651 修订阈值, R653 第三轮复核未触发)
 **现象**: 非流式请求 `execute_request 成功但 collect 读流中断` → 直接 502, 不触发 buffer 5key 重试.
 **位置**: handlers.py:967 `_collect_stream_to_anth` 调用点, 与 handlers.py:910 `not result.success` 非流式 buffer retry 条件互斥.
-**R652 复核**: 150min 回查 IncompleteRead 仍只 1 行 (c1297569), 未出现第 2 个独立 request_id.
-**阈值 (R651 修订, R652 沿用)**:
+**R653 复核**: 150min 回查 IncompleteRead 仍只 1 行 (c1297569, min=max=07:20:50), 未出现第 2 个独立 request_id.
+**阈值 (R651 修订, R653 沿用)**:
 - 触发改动评估 = **150min 回查 IncompleteRead >= 2 个不同 request_id** (排除跨窗口回放)
 - 或 单 30min 窗口内 >= 2 个不同 request_id 的 IncompleteRead
 - 单一请求跨窗口回放**不算**持续故障
 **为何仍不改**:
-1. 单一请求跨窗口回放 ≠ 持续故障模式, 不构成 collect 重试改动依据
+1. 单次事件 (min=max=07:20:50) ≠ 持续故障模式, 不构成 collect 重试改动依据
 2. 改 collect 重试逻辑风险高于收益 (需重建 conn + 重发 NVCF, 需保证 oai_body 幂等, 可能引入新 race)
 3. cc2 实际可用性 93.8% (15/16), IncompleteRead 是 NVCF 侧流中途断 (613 bytes), 非 nv_gw 逻辑缺陷
 
@@ -43,14 +44,14 @@
 - **本轮 NOP, 不改码**: 链路实测健康 (cc2 15/16=93.8%, deadline 链 6h=0, 配置无漂移, tier 层短惩罚生效)
 - **持续观察点**:
   1. cc2 路径 IncompleteRead — **改用 150min 回查 request_id 唯一性** 判断是否真实增长
-     - 当前 150min 仅 c1297569 一条 (R651/R652 两轮复核一致), 不构成持续故障
+     - 当前 150min 仅 c1297569 一条 (R651/R652/R653 三轮复核一致), 不构成持续故障
      - 若 150min 回查出现 >= 2 个不同 request_id → 才评估 collect 中断触发 buffer 重试 (handlers.py:1810)
   2. dsv4p_nv 配额型 429 全挂 (持续, NVCF 无 retry-after 头)
-     - SR 77.8% (14/18), all_tiers_exhausted ×4 (5key 全 429→TIER_COOLDOWN 180s)
+     - SR 73.3% (11/15), all_tiers_exhausted ×4 (5key 全 429→TIER_COOLDOWN 180s)
   3. deadline 链健康 (6h=0), 持续监控
 - **建议维持**: 联系 NVCF 侧评估 dsv4p_nv 账户配额扩容 / 提供 retry-after 头
 
-## 参数快照 (R652 实测无变化, 沿用 R651 docker exec env)
+## 参数快照 (R653 实测无变化, 沿用 R651 docker exec env)
 - nv_gw: NVU_DISABLE_MS_FALLBACK=1, UPSTREAM_TIMEOUT=90, TIER_COOLDOWN_S=180,
   KEY_COOLDOWN_S=30, NV_INTEGRATE_KEY_COOLDOWN_S=90, MIN_OUTBOUND_INTERVAL_S=10,
   NVU_FORCE_STREAM_UPGRADE=0, NVU_FORCE_STREAM_UPGRADE_TIMEOUT=150,
