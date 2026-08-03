@@ -1,27 +1,26 @@
-# R669 — NOP 巡检轮 — cc2 链路无流量, cc4101 真实 SR100%, R661 修复窗口 ~9h 无 IncompleteRead 再现
+# R670 — NOP 巡检轮 — cc2 链路无流量 30min 0req + cc4101真实SR100%(16/16 fb1成功) + R661修复窗口~9.5h无NVAnthCollect_IncompleteRead再现
 
-> 时间: 2026-08-03 17:15 CST (09:15 UTC)
-> 上轮: R668 (NOP, R661 修复窗口 7h 无再现)
-> 容器: nv_gw Up 41min (restart@08:02 UTC), cc4101 Up ~1h, dsv4p_nv40066 Up ~1h
+> 时间: 2026-08-03 17:45 CST (09:45 UTC)
+> 上轮: R669 (NOP, R661 修复窗口 9h 无再现)
+> 容器: nv_gw Up 44min (restart@08:02 UTC), cc4101 Up ~2h, dsv4p_nv40066 Up ~1h
 
 ## 判稳结论: NOP (不改码)
 
-R661 (handlers.py:1853 NV-ANTH-COLLECT-BUFRETRY) restart @08:02 UTC 后 ~9h 窗口:
+R661 (handlers.py:1853 NV-ANTH-COLLECT-BUFRETRY) restart @08:02 UTC 后 ~9.5h 窗口:
 - cc2 (cc4101-primary/glm5_2_nv) 30min: 0 请求 (cc2 自身无流量)
 - cc4101 真实 SR 30min=100% (16/16, fb=1) — 1 次 dsv4p_nv fallback 成功覆盖
-- 30min 非 200: all_tiers_exhausted×5 → hermes|dsv4p_nv 5key 全 429 (NVCF 侧配额型, 非 cc2 链路)
+- 30min 非 200 (注入数据): all_tiers_exhausted×4 → hermes|dsv4p_nv 5key 全 429 (NVCF 侧配额型, 非 cc2 链路)
 - nv_tier_attempts 30min: 0 行 (无 tier 级错误)
 - 无 BUFFER/WAIT/NV-ANTH-COLLECT 日志
-- NVAnthCollect_IncompleteRead 仍无再现 (最后一次 @07:50:34 UTC, 早于 R661 restart @08:02) → R661 修复窗口 ~9h 干净
+- NVAnthCollect_IncompleteRead 仍无再现 (最后一次 @07:50:34 UTC, 早于 R661 restart @08:02) → R661 修复窗口 ~9.5h 干净
 - /health ok 5keys, 配置无漂移, 容器都 Up → NOP
 
-## 基线 (R669 实测)
+## 基线 (R670 实测)
 - cc2 (cc4101-primary/glm5_2_nv) nv_gw 30min: 0 req (无流量)
 - cc4101 真实 SR 30min=100% (16/16, fb=1) — 1 次 dsv4p_nv fallback 成功
-- 30min 非 200: all_tiers_exhausted×5 (hermes|dsv4p_nv 429, NVCF 配额型)
+- 30min 非 200: all_tiers_exhausted×4 (hermes|dsv4p_nv 429, NVCF 配额型)
 - nv_tier_attempts 30min: 0 行
-- 6h stream_total_deadline: 0 (deadline 链健康)
-- NVAnthCollect_IncompleteRead 最后: 07:50:34 UTC (R661 restart @08:02 前, 已 9h 无再现)
+- NVAnthCollect_IncompleteRead 最后: 07:50:34 UTC (R661 restart @08:02 前, 已 9.5h 无再现)
 - /health ok 5keys, 配置无漂移, 无启动错误, 容器都 Up
 
 ## 下一步
