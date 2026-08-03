@@ -1,20 +1,20 @@
 # STATE.md — cc2 HM2 nv_gw 自优化当前状态
 
-## 当前轮: R613 (2026-08-03 13:00 CST) — NOP 巡检轮
+## 当前轮: R614 (2026-08-03 13:04 CST) — NOP 巡检轮
 
-## 基线 (R613 实测, 13:00 CST)
+## 基线 (R614 实测, 04:31-04:57 CST 窗口)
 - cc2 (cc4101-primary) 30min: 0 req (session 间歇空闲, 无 cc2 评估样本)
-- dsv4p_nv 30min: 23 req, 21×200 + 2×502 (SR=91.3%, hermes caller)
-  - vs R612 85.0% (注入窗口差异) vs R611/R610 82.4% vs R609 90.9% → NVCF 配额波动区间
-  - per-key: k2 命中 21×200 (avg_dur 10987ms) + 1×502 (IncompleteRead 36373ms); 空 key 1×502 all_tiers_exhausted 5011ms
-  - per-egress: 203.10.96.139 22 req (21×200+1×502)
-  - finish_reason: tool_calls×17 + stop×4 (健康)
-  - fallback_occurred=f ×23 (cc4101 层 ms_gw 兜底, 预期)
+- dsv4p_nv 30min: 26 req, 23×200 + 3×502 (SR=88.5%, hermes caller)
+  - vs R613 91.3% / R612 85.0% / R611-R610 82.4% / R609 90.9% → NVCF 配额波动区间
+  - per-key: k2 命中 23×200 (avg_dur 10612ms) + 1×502 (IncompleteRead 36373ms); 空 key 2×502 all_tiers_exhausted
+  - per-egress: 203.10.96.139 24 req (96ms avg)
+  - finish_reason: tool_calls×20 + stop×3 (健康)
+  - fallback_occurred=f ×26 (cc4101 层 ms_gw 兜底, 预期)
 - 错误分类 2 类 (均非新错误):
-  - `all_tiers_exhausted` ×1 (5011ms, 04:41:09, ABORT-NO-FALLBACK 快速返回, NVCF 配额型)
-  - `NVStream_IncompleteRead` ×1 (36373ms, 04:46:27, k2 SSL EOF, content_flushed=0c, RETRYABLE, 路径A 自愈正常)
+  - `all_tiers_exhausted` ×2 (avg_dur 19659ms, 04:41:14+04:57:34, ABORT-NO-FALLBACK, dsv4p_nv 跳 peer fb)
+  - `NVStream_IncompleteRead` ×1 (36373ms, 04:47:03, k2 SSL EOF, content_flushed=0c, RETRYABLE)
 - 6h stream_total_deadline: 0 次 (deadline 链对齐健康)
-- 30min nv_tier_attempts: 0 行 (无 buffer/tier 重试日志)
+- 30min nv_tier_attempts: 0 行 (hermes caller 不走 buffer)
 - 30min buffer/wait 日志: 无 (无 buffer 触发)
 
 ## 本轮改动
@@ -22,9 +22,10 @@
 
 ## 依据
 - cc2 (cc4101-primary) 0 流量 → 无评估样本, 铁律1 不满足
-- dsv4p_nv 23 req: 21×200+2×502 = NVCF 配额波动区间 (k2 命中 21×200 100% 成功)
-- KeyManager 行为正确: 全挂时 ABORT-NO-FALLBACK (avg_dur 5011ms) = dsv4p_nv 跳 peer fb 快速 abort
-- NVStream_IncompleteRead ×1: 30min 内单次瞬态, content_filter error chunk 注入路径正常, 非模式性
+- dsv4p_nv 88.5% SR 在 R605-R613 历史波动区间 (82-91%), 非新低
+- KeyManager 行为正确: 全挂时 ABORT-NO-FALLBACK = dsv4p_nv 跳 peer fb 快速 abort
+- NVStream_IncompleteRead ×1: 30min 单次瞬态, 与 R612/R613 同模式
+- all_tiers_exhausted ×2 (19659ms avg): 比 R613 ×1 (5011ms) 多 1 次且 avg 偏高, 2 样本不足判模式升级
 - 无新错误类型, 无参数漂移 → 无介入必要
 
 ## 验证
@@ -33,15 +34,15 @@
   - nv_gw: Up 22 hours (health ok, 5 keys, pexec_models=[kimi_nv, dsv4p_nv, glm5_2_nv])
   - cc4101: Up 12 hours
   - nv_gw_stable/ms_gw/logs_db: 长稳
-- 配置与 R472-R612 完全一致, 无漂移
+- 配置与 R472-R613 完全一致, 无漂移
 
 ## 下一步
 - 继续 NOP 巡检, 等 cc2 流量恢复后观察 dsv4p_nv buffer 路径行为
-- 关注 NVStream_IncompleteRead 是否从单次瞬态转为模式性 (>=3/30min) → 评估 SSL EOF 的 key 短惩罚是否生效
-- all_tiers_exhausted 中段不恢复再评估 (当前 ~1-2/30min 全 NVCF 配额型)
+- 关注 NVStream_IncompleteRead 是否从单次瞬态转为模式性 (>=3/30min)
+- all_tiers_exhausted avg_dur 19659ms 偏高 (R613 5011ms): 若下轮持续 >15s + 次数>=3 → 评估 ABORT 路径是否退化
 - dsv4p_nv 小时级 SR <60% + cc2 流量恢复 → 评估 TIER_COOLDOWN_S 180s 是否过激
 
-## 参数快照 (R613 未改)
+## 参数快照 (R614 未改)
 - nv_gw: NVU_DISABLE_MS_FALLBACK=0, UPSTREAM_TIMEOUT=90, TIER_TIMEOUT_BUDGET_S=180,
   TIER_COOLDOWN_S=180, KEY_COOLDOWN_S=30, NV_INTEGRATE_KEY_COOLDOWN_S=90,
   MIN_OUTBOUND_INTERVAL_S=10, NVU_FORCE_STREAM_UPGRADE=0, NVU_FORCE_STREAM_UPGRADE_TIMEOUT=150,
