@@ -1,16 +1,16 @@
 # STATE.md — cc2 HM2 nv_gw 自优化当前状态
 
-## 当前轮: R570 (2026-08-03 09:22 CST) — NOP 巡检轮
+## 当前轮: R571 (2026-08-03 09:30 CST) — NOP 巡检轮
 
-## 基线 (R570 实测)
+## 基线 (R571 实测)
 - cc2 (cc4101-primary) 30min: 0 req (session 间歇空闲, 无 cc2 评估样本)
 - dsv4p_nv 30min: 10 req, 4×200 + 6×429 (SR=40.0%, 全 hermes caller)
-- 唯一错误 `all_tiers_exhausted` × 6 (avg_dur=2746ms, NVCF 配额型, 非 nv_gw 故障)
+- 唯一错误 `all_tiers_exhausted` × 6 (avg_dur=2764ms, NVCF 配额型, 非 nv_gw 故障)
 - nv_tier_attempts 0 行 = KeyManager 全局冷却在 tier 层前拦截
-- 周期性 GLOBAL-COOLDOWN 180s / 5min (与 R268-R569 一致)
+- 周期性 GLOBAL-COOLDOWN 180s / 5min (与 R268-R570 一致)
 - 无 stream_total_deadline, 无 zombie, 无 buffer/wait 日志
 - 200 延迟 avg 5293ms (在 90s budget 内, 健康)
-- 配置与 R475-R569 完全一致, 无漂移
+- 配置与 R475-R570 完全一致, 无漂移
 
 ## 本轮改动
 - 无 (NOP). 铁律1 cc2 视角不满足 → 不动码.
@@ -33,7 +33,7 @@
 - all_tiers_exhausted 中段不恢复再评估 (当前 ~12/h 全 NVCF 配额型)
 - 502 (peer-fb-skip) >=6/h + cc2 流量恢复 → 评估 dsv4p_nv fallback 策略
 
-## 参数快照 (R570 未改)
+## 参数快照 (R571 未改)
 - nv_gw: NVU_DISABLE_MS_FALLBACK=0, UPSTREAM_TIMEOUT=90, TIER_TIMEOUT_BUDGET_S=180,
   TIER_COOLDOWN_S=180, KEY_COOLDOWN_S=30, NV_INTEGRATE_KEY_COOLDOWN_S=90,
   MIN_OUTBOUND_INTERVAL_S=10, NVU_FORCE_STREAM_UPGRADE=0, NVU_FORCE_STREAM_UPGRADE_TIMEOUT=150,
