@@ -1,30 +1,31 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: R722 (NOP 巡检, 2026-08-03 20:15 CST)
-> 上轮: R721 (NOP, cc2 零流量 dsv4p98.5% glm5_2_nv66.7% NVCF上游恢复停滞)
+> 当前轮: R723 (NOP 巡检, 2026-08-03 20:19 CST)
+> 上轮: R722 (NOP, cc2 零流量 dsv4p98.5% glm5_2_nv66.7% NVCF上游恢复停滞)
 
-## 本轮 (R722) 改了什么 + 依据 + 验证
+## 本轮 (R723) 改了什么 + 依据 + 验证
 
 ### 改动: 不改码 (NOP)
 
-### 依据 (30min 窗口 ~19:45-20:15 CST, 注入数据)
-- **cc2 (cc4101-primary) 30min**: 0 rows — cc2 本窗口零流量, 无数据不动手 (连续第 7 轮零流量)
+### 依据 (30min 窗口 ~19:49-20:19 CST, 注入数据)
+- **cc2 (cc4101-primary) 30min**: 0 rows — cc2 本窗口零流量, 无数据不动手 (连续第 8 轮零流量)
 - **nv_gw 全量 30min** (hermes caller, 非 cc2):
-  - dsv4p_nv: 64×200 + 1×502 = SR **98.5%** (64/65) — 持平 R721, 兜底链路稳态
-    - 七轮趋势: R716 91.3%→R717 92.0%→R718 91.3%→R719 93.1%→R720 97.7%→R721 98.5%→R722 98.5%
-  - glm5_2_nv: 4×200 + 2×502 = SR **66.7%** (4/6) — 持平 R720/R721, 七轮趋势 0%→50%→57.1%→57.1%→66.7%→66.7%→66.7% 恢复停滞
+  - dsv4p_nv: 64×200 = SR **100.0%** (64/64) — 比 R722 的 98.5% 小幅回升, 502 消失
+    - 八轮趋势: R716 91.3%→R717 92.0%→R718 91.3%→R719 93.1%→R720 97.7%→R721 98.5%→R722 98.5%→R723 100.0%
+  - glm5_2_nv: 2×200 + 2×502 = SR **50.0%** (2/4) — 比 R722 的 66.7% 小幅下滑 (4 req 小样本噪音)
+    - 八轮趋势: 0%→50%→57.1%→57.1%→66.7%→66.7%→66.7%→50.0% (小样本波动, 非 NVCF 新挂)
   - other|dsv4p_nv|200×15 — 其他 caller 流量也走 dsv4p 兜底
 - **错误分类 (30min, 无新错误类型)**:
   - NVStream_IncompleteRead × 1 (avg_dur 78s) — mid-stream 断流
-  - all_tiers_exhausted × 1 (all_tiers_failed_in_mapped_tier, avg_dur 90s) — 5key 全挂
   - stream_absolute_cap × 1 (avg_dur 187s) — 绝对时长封顶 (非新类型, R713 曾见)
-- **per-key (dsv4p)**: k0 13×200, k1 13×200, k2 13×200, k3 14×200, k4 12×200 — 均衡
-- **per-egress-IP (dsv4p)**: 5 US IP 全 100% (12-14 req 各) — IP 轮转健康
-- **dsv4p 200 延迟**: avg 7801ms, max 32224ms, min 1430ms, ttfb 7282ms, avg_in 2 tok, avg_out 11 tok, finish_reason tool_calls×44/stop×14/length×7 (无 zombie)
-- **tier 错误**: IntegrateRemoteDisconnected×3(k1/k3/k4), pexec_500×1(k2), pexec_conn_RemoteDisconnected×4(k2), pexec_success×1(k2) — 全 NVCF 上游配额副作用, 非 nv_gw 可控
-- **fallback**: f×72 (全非 cc2, hermes 流量)
+  - 注: R722 的 all_tiers_exhausted × 1 本窗口消失
+- **per-key (dsv4p)**: k0 13×200, k1 13×200, k2 13×200, k3 13×200, k4 12×200 — 均衡
+- **per-egress-IP (dsv4p)**: 5 US IP 全 100% (12-13 req 各) — IP 轮转健康
+- **dsv4p 200 延迟**: avg 7348ms, max 32224ms, min 1430ms, ttfb 6842ms, avg_in 2 tok, avg_out 11 tok, finish_reason tool_calls×42/stop×15/length×7 (无 zombie)
+- **tier 错误**: IntegrateRemoteDisconnected×3(k1/k3/k4), pexec_conn_RemoteDisconnected×4(k2) — 全 NVCF 上游配额副作用 (R722 的 pexec_500/pexec_success 消失)
+- **fallback**: f×68 (全非 cc2, hermes 流量)
 - **buffer/wait/keymanager 日志**: 无 (无 buffer 触发, 链路直接 fallback 到 dsv4p)
-- **根因**: glm5_2_nv NVCF 上游恢复停滞于 66.7% (R720/R721/R722 三轮持平), cc4101 fallback → dsv4p 兜底, cc2 本窗口零流量
+- **根因**: glm5_2_nv NVCF 上游八轮趋势 50%-66.7% 区间波动, 本轮 4 req 小样本噪音下滑, 非 NVCF 新挂; cc4101 fallback → dsv4p 兜底 100% 稳健; cc2 本窗口零流量
 
 ### 验证: NOP 无需 restart
 - `curl /health`: nv_gw ok(5keys, glm5_2_nv/dsv4p_nv/kimi_nv) + cc4101 ok(primary=glm5_2_nv) + dsv4p_nv40066 ok(5keys) — 全 ok
@@ -37,7 +38,7 @@
 
 ## 下一步
 - 持续监控 cc2 SR + fallback 触发率 (目标 SR99%+ fb<10%)
-- glm5_2_nv NVCF 上游恢复停滞于 66.7% (三轮持平), 继续观察是否突破稳态
+- glm5_2_nv NVCF 上游八轮趋势 50%-66.7% 区间波动, 继续观察是否突破稳态
 - 若 cc2 流量恢复后 fallback 率 >10% 再深入查 glm5_2_nv tier
 - R661 post-restart ~42h+ 仍无新错误类型, 配置稳定
 
