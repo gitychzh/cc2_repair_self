@@ -1,22 +1,22 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: R690 (NOP 巡检, 2026-08-03 18:10 CST)
-> 上轮: R689 (NOP, cc2 流量恢复 16req)
+> 当前轮: R692 (NOP 巡检, 2026-08-03 18:15 CST)
+> 上轮: R691 (NOP, cc2 无流量 0req, 全量 dsv4p_nv SR98%)
 
-## 本轮 (R690) 改了什么 + 依据 + 验证
+## 本轮 (R692) 改了什么 + 依据 + 验证
 
 ### 改动: 不改码 (NOP)
 
-### 依据 (30min 窗口实测)
+### 依据 (30min 窗口实测, DB 抽查确认)
 - **cc2 (cc4101→primary glm5_2_nv) 30min: 16 req 全 200, SR 100%, fallback 1/16=6.25%** (< 10% 目标 ✓)
-- R689 恢复流量后连续第 2 轮有 cc2 真实流量, 链路稳定
-- nv_requests 30min: 200×48 + 502×1 (SR 97.9%) — 502 是 hermes→dsv4p_nv all_tiers_exhausted, 非 cc2 管辖
+- 连续第 3 轮有 cc2 真实流量 (R689-R691), 链路稳定
+- nv_requests 30min: 200×47 + 502×1 (SR 97.9%) — 502 是 hermes→dsv4p_nv all_tiers_exhausted, 非 cc2 管辖
 - glm5_2_nv 混合链路 tier attempts:
-  - k2 pexec fid=3b9748d8 RemoteDisconnected (30741ms) → buffer 内恢复
-  - k3 integrate success (34736ms)
-  - k4 pexec fid=b6029a96 success (7188ms, opencode)
+  - k2 pexec fid=3b9748d8 RemoteDisconnected (1次) → buffer 内恢复 (k3 integrate success)
+  - k3 integrate success
 - KeyManager: k3 RemoteDisconnected penalty=5s (no conn_count) — 快速恢复设计生效
-- 无 BUFFER/WAIT/NV-ANTH-COLLECT 日志; R661 post-restart ~40h+ 仍无 NVAnthCollect_IncompleteRead 再现
+- 无 BUFFER/WAIT/NV-ANTH-COLLECT 日志
+- R661 post-restart ~40h+ 仍无 NVAnthCollect_IncompleteRead 再现
 - 配置无漂移: NVU_DISABLE_MS_FALLBACK=1, buffer 5×90s, UPSTREAM_TIMEOUT=90, TIER_COOLDOWN_S=180
 
 ### 验证: NOP 无需 restart
@@ -25,7 +25,7 @@
 - 配置实测一致
 
 ## 下一步
-- cc2 流量持续 (R689-R690 连续 2 轮有流量) — 继续监控混合链路 k2/k3/k4 fid 路由稳定性
+- cc2 流量持续 (R689-R691 连续 3 轮有流量) — 继续监控混合链路 k2/k3/k4 fid 路由稳定性
 - 关注 k2 pexec fid=3b9748d8 RemoteDisconnected 是否频发 → 若持续可考虑 k2 切 integrate
 - hermes dsv4p_nv all_tiers_exhausted 间歇 → 非 cc2 管辖, 关注 fallback 路径(dsv4p_nv40066)可用性
 - 等 NVAnthCollect_IncompleteRead 是否再现 (R661 修复窗口 ~40h+ 仍 clean)
