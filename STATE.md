@@ -1,15 +1,15 @@
 # STATE.md — cc2 HM2 nv_gw 自优化当前状态
 
-## 当前轮: R593 (2026-08-03 11:22 CST) — NOP 巡检轮
+## 当前轮: R593 (2026-08-03 11:25 CST) — NOP 巡检轮
 
-## 基线 (R593 实测, 11:22 CST 链路分析注入)
+## 基线 (R593 实测, 11:25 CST 链路分析注入)
 - cc2 (cc4101-primary) 30min: 0 req (session 间歇空闲, 无 cc2 评估样本)
-- dsv4p_nv 30min: 13 req, 8×200 + 4×429 (SR=69.2%, 全 hermes caller)
+- dsv4p_nv 30min: 13 req, 8×200 + 4×429 + 1×200 (SR=69.2%, 全 hermes caller)
   - vs R592 66.7% → 波动区间内一致, R545-R592 同一 NVCF 配额模式
   - per-key: key2 8×200 (命中可用 key 100% 200, avg_dur=10272ms, IP 203.10.96.139)
   - per-key: key3 1×200 (命中可用 key 100% 200, avg_dur=3274ms, IP 134.195.101.194)
   - 空 key 4×429 (全挂时 NVCF 侧拒绝, avg_dur=2616ms 快速返回, 配额波动区间)
-- 唯一错误 `all_tiers_exhausted` ×4 (avg_dur=2616ms, NVCF 配额型, 非 nv_gw 故障)
+- 唯一错误 `all_tiers_exhausted` ×4 (avg_dur=2616ms, NVCF 配额型, 非 nv_gw tier 故障)
 - nv_tier_attempts 0 行 = KeyManager 全局冷却在 tier 层前拦截
 - 429 全在空 key/空 IP = NVCF 侧拒绝 (配额波动区间)
 - key2 = 8×200 + key3 = 1×200 (命中可用 key 时 100% 200)
