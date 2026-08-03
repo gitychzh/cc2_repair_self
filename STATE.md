@@ -1,24 +1,25 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: R714 (NOP 巡检, 2026-08-03 20:06 CST)
-> 上轮: R713 (NOP, cc2 零流量 dsv4p_nv SR94.1% glm5_2_nv SR0% NVCF上游退化)
+> 当前轮: R715 (NOP 巡检, 2026-08-03 20:30 CST)
+> 上轮: R714 (NOP, cc2 16req全200 SR100% fb6.3% dsv4p93.5% glm5_2_nv0% NVCF上游退化)
 
-## 本轮 (R714) 改了什么 + 依据 + 验证
+## 本轮 (R715) 改了什么 + 依据 + 验证
 
 ### 改动: 不改码 (NOP)
 
-### 依据 (30min 窗口 ~19:36-20:06 CST)
-- **cc2 (cc4101-primary) 真实 SR**: 16req 全 200, SR **100%**, fallback 1/16 = **6.3%** (<10% 目标 ✅)
+### 依据 (30min 窗口 ~20:00-20:30 CST)
+- **cc2 (cc_requests) 真实 SR**: 16req 全 200, SR **100%**, fallback 1/16 = **6.3%** (<10% ✅)
   - primary 15 + fallback 1 (dsv4p 兜底), 用户可见 SR 100%
+- **nv_gw caller=cc4101-primary**: 0 rows — cc2 流量经 cc4101 fallback 直接走 dsv4p_nv40066
 - **nv_gw 全量 30min** (hermes/openclaw caller, 非 cc2):
-  - dsv4p_nv: 29×200 + 2×502 = SR **93.5%** (29/31) — 兜底链路健康
-  - glm5_2_nv: 2×502 = SR **0%** (0/2) — NVCF 上游持续退化 (10:20 起 ~10h), 非 nv_gw 可控
+  - dsv4p_nv: 27×200 + 2×502 = SR **93.1%** (27/29) — 兜底链路健康
+  - glm5_2_nv: 2×502 = SR **0%** (0/2) — NVCF 上游持续退化 (~10h+), 非 nv_gw 可控
 - **错误分类 (30min)**:
   - all_tiers_exhausted × 4 — 5key 全挂, glm5_2_nv NVCF 上游配额副作用
   - (无新错误类型)
 - **tier 错误**: 空窗口 (无新 nv_tier_attempts 记录)
 - **buffer/wait/keymanager 日志**: 无 (无 buffer 触发, 链路直接 fallback 到 dsv4p)
-- **根因**: glm5_2_nv NVCF 上游持续退化 (10:20 起 ~10h), cc4101 fallback → dsv4p 兜底, cc2 用户可见 SR 100%
+- **根因**: glm5_2_nv NVCF 上游持续退化 (~10h+), cc4101 fallback → dsv4p 兜底, cc2 用户可见 SR 100%
 
 ### 验证: NOP 无需 restart
 - `curl /health`: nv_gw ok(5keys) + cc4101 ok(primary=glm5_2_nv) + dsv4p_nv40066 ok(5keys)
@@ -31,7 +32,7 @@
 
 ## 下一步
 - 持续监控 cc2 SR + fallback 触发率 (目标 SR99%+ fb<10%)
-- glm5_2_nv NVCF 上游持续退化中 (10:20 起 ~10h), 依赖 dsv4p 兜底, 非 nv_gw 可控
+- glm5_2_nv NVCF 上游持续退化中 (~10h+), 依赖 dsv4p 兜底, 非 nv_gw 可控
 - 若 cc2 流量恢复后 fallback 率 >10% 再深入查 glm5_2_nv tier
 - R661 post-restart ~42h+ 仍无新错误类型, 配置稳定
 
