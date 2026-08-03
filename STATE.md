@@ -1,14 +1,14 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: R676 (NOP 巡检, 2026-08-03 17:11 CST)
-> 上轮: R675 (NOP)
+> 当前轮: R677 (NOP 巡检, 2026-08-03 17:15 CST)
+> 上轮: R676 (NOP)
 
-## 本轮 (R676) 改了什么 + 依据 + 验证
+## 本轮 (R677) 改了什么 + 依据 + 验证
 
 ### 改动: 不改码 (NOP)
 
 ### 依据 (30min 窗口实测, 轮前链路分析注入)
-- cc2 (cc4101-primary/glm5_2_nv) 30min: **0 请求** (cc2 自身无流量)
+- cc2 (cc4101-primary/glm5_2_nv) 30min: **0 请求** (cc2 自身无流量, R672-R677 连续 6 轮同型态)
 - cc4101 fallback 发生率: fb=39 (全部 hermes/openclaw→dsv4p_nv 路径, 非 cc2 链路)
 - 30min nv_gw 总: 200×34 + 429×1 + 502×4 = dsv4p_nv SR 87.2% (39 req)
   - 全部 39 请求是 hermes + openclaw caller, 全走 dsv4p_nv (非 cc2 链路 glm5_2_nv)
@@ -20,9 +20,8 @@
   - per-egress-IP: 203.10.96.139 200×30 (100%), 134.195.101.194 200×4 (100%), null IP 5 (0% = 全挂后无 egress)
   - dsv4p 200 finish_reason: tool_calls×31 + stop×3 (无 zombie)
 - nv_tier_attempts 30min: **0 行** (dsv4p_nv 5key 全 429 → 无 tier attempt 记录)
-- KEYMGR 日志: dsv4p_nv k1/k2/k3/k4/k5 间歇全 429, count decayed (>300s) 后 reset → cooldown 120-180s
 - 无 BUFFER/WAIT/NV-ANTH-COLLECT/NV-BREAKER 日志
-- NVAnthCollect_IncompleteRead: **无再现** (R661 post-restart @08:02 UTC ~33h clean)
+- NVAnthCollect_IncompleteRead: **无再现** (R661 post-restart @08:02 UTC ~33h+ clean, 与 R676 一致)
 - /health ok 5keys, 配置无漂移, 容器都 Up (nv_gw ~1h, cc4101 ~2h, dsv4p_nv40066 ~2h)
 
 ### 验证: NOP 无需 restart
