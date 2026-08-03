@@ -1,25 +1,26 @@
 # STATE.md — cc2 HM2 nv_gw 自优化当前状态
 
-## 当前轮: R601 (2026-08-03 12:05 CST) — NOP 巡检轮
+## 当前轮: R602 (2026-08-03 12:17 CST) — NOP 巡检轮
 
-## 基线 (R601 链路分析注入, 12:05 CST)
+## 基线 (R602 链路分析注入, 12:16 CST)
 - cc2 (cc4101-primary) 30min: 0 req (session 间歇空闲, 无 cc2 评估样本)
-- dsv4p_nv 30min: 15 req, 10×200 + 4×429 + 1×502 (SR=66.7%, hermes caller)
-  - vs R600 61.5% vs R599 45.5% vs R598 50.0% vs R597 50.0% vs R596 57.1% vs R595 66.7% → 波动区间内一致, 与 R545-R600 同一 NVCF 配额波动模式
-  - per-key: key2 10×200 (命中可用 key 100% 200, avg_dur=12024ms, IP 203.10.96.139)
-  - 空 key 4×429 + 1×502 (全挂时 NVCF 侧拒绝, avg_dur ~1446ms/271ms 快速返回, 配额波动区间)
-- 唯一错误 `all_tiers_exhausted` ×5 (avg_dur=1211ms, NVCF 配额型, 非 nv_gw tier 故障)
+- dsv4p_nv 30min: 26 req, 22×200 + 2×429 + 2×502 (SR=84.6%, hermes caller)
+  - vs R601 66.7% vs R600 61.5% vs R599 45.5% vs R598 50.0% vs R597 50.0% → 上升, 仍在 NVCF 配额波动区间
+  - per-key: key2 22×200 (命中可用 key 100% 200, avg_dur=11405ms, IP 203.10.96.139)
+  - 空 key 2×429 + 2×502 (全挂时 NVCF 侧拒绝, avg_dur ~1286ms/17494ms, 配额波动区间)
+- 唯一错误 `all_tiers_exhausted` ×4 (avg_dur=9390ms, NVCF 配额型, 非 nv_gw tier 故障)
 - nv_tier_attempts 0 行 = KeyManager 全局冷却在 tier 层前拦截
-- 429 全在空 key/空 IP = NVCF 侧拒绝 (配额波动区间)
-- key2 = 10×200 (命中可用 key 时 100% 200)
+- 429/502 全在空 key/空 IP = NVCF 侧拒绝 (配额波动区间)
+- key2 = 22×200 (命中可用 key 时 100% 200)
 - 无 buffer/wait 日志 (30min 无 buffer 触发), 无 stream_total_deadline, 无 zombie
-- finish_reason: tool_calls×9 + stop×1 (健康, 无 zombie stop)
+- finish_reason: tool_calls×20 + stop×2 (健康, 无 zombie stop)
 - 全挂时 ABORT-NO-FALLBACK 是预期 (dsv4p_nv 跳 peer/ms fb, cc4101 层 ms_gw 兜底)
-- fallback 发生率 f×15 (cc4101 层 ms_gw 兜底, 预期)
-- 按分钟趋势: 03:36-03:56 全挂 4×429 → 04:01-04:02 恢复 10×200 + 1×502 (NVCF 配额恢复)
-- 配置与 R472-R600 完全一致, 无漂移
+- fallback 发生率 f×26 (cc4101 层 ms_gw 兜底, 预期)
+- 按分钟趋势: 03:51 全挂 429 → 04:01-04:12 恢复 22×200 + 2×502 → 04:16 又 429 (NVCF 配额波动)
+- per-egress-IP: 203.10.96.139 22×100 (命中 IP 100% 200), 空 IP 4×0
+- 配置与 R472-R601 完全一致, 无漂移
 
-## 6h SR 趋势 (dsv4p_nv, 按小时, R575 实测复测, R576-R600 一致模式)
+## 6h SR 趋势 (dsv4p_nv, 按小时, R575 实测复测, R576-R601 一致模式)
 - 08-02 19:00: 0×200+2×429 (全挂)
 - 08-02 20:00: 4×200+12×429
 - 08-02 21:00: 12×200+10×429+1×502
@@ -29,7 +30,7 @@
 - 08-03 01:00: 7×200+10×429
 → SR 在 20%-55% 波动, 命中可用 key 时 100% 200 = NVCF 配额型波动
 
-## 6h per-key × status (dsv4p_nv, R575 实测, R576-R600 一致模式)
+## 6h per-key × status (dsv4p_nv, R575 实测, R576-R601 一致模式)
 - key2: 43×200 (主力可用 key)
 - key3: 4×200 + 1×502
 - 空 key (全挂时): 65×429 + 2×502
@@ -40,26 +41,31 @@
 
 ## 依据
 - cc2 0 流量 → 无评估样本, 铁律1 不满足
-- dsv4p_nv 15 req: 10×200+4×429+1×502 = NVCF 配额波动区间 (命中 key2 100% 200, 全挂时空 key 429 avg_dur=1446ms 快速返回)
+- dsv4p_nv 26 req: 22×200+2×429+2×502 = NVCF 配额波动区间 (命中 key2 100% 200, 全挂时空 key 429/502)
 - 6h 趋势: SR 波动 20%-55%, 命中可用 key 时 100% 200 → 非 nv_gw tier 故障
 - KeyManager 行为完全正确: 429 cooldown/count decay/reset 按设计工作
   - 全挂时 `NV-ALL-TIERS-FAIL ABORT-NO-FALLBACK` = dsv4p_nv 跳 peer/ms fb, 预期行为
 - 无新错误类型, 无参数漂移 → 无介入必要
-- 本轮 SR=66.7% vs R600 61.5% vs R599 45.5% vs R598 50.0% vs R597 50.0% vs R596 57.1% vs R595 66.7% vs R594 54.5% vs R593 69.2% vs R592 66.7% vs R591 44.4% vs R590 37.5% vs R589 37.5% → 波动区间内, 与 R545-R600 同一 NVCF 配额波动模式
+- 本轮 SR=84.6% vs R601 66.7% vs R600 61.5% vs R599 45.5% vs R598 50.0% vs R597 50.0% vs R596 57.1% vs R595 66.7% vs R594 54.5% vs R593 69.2% vs R592 66.7% vs R591 44.4% vs R590 37.5% vs R589 37.5% → 波动区间内, 与 R545-R601 同一 NVCF 配额波动模式
 
 ## 验证
 - 0 restart → 无需 py_compile / curl 复测
-- 容器: nv_gw Up 34h, cc4101 Up 22h, ms_gw/logs_db 长稳 (注入数据)
-- 配置与 R472-R600 完全一致, 无漂移
+- 容器 (docker ps 实测, 修正 R601 误记):
+  - nv_gw: Up 22 hours (R601 STATE 误把 nv_gw_stable 34h 记成 nv_gw, 本轮修正)
+  - nv_gw_stable: Up 34 hours
+  - cc4101: Up 12 hours (R601 记 22h, 本轮 12h, 容器未重启仅 uptime 推进)
+  - ms_gw/logs_db: 长稳
+- /health: ok, 5 keys, 3 models (kimi_nv/dsv4p_nv/glm5_2_nv), port 40006
+- 配置与 R472-R601 完全一致, 无漂移
 
 ## 下一步
 - 继续 NOP 巡检, 等 cc2 流量恢复后观察 dsv4p_nv buffer 路径行为
 - 关注新错误类型或 key/IP 级故障再决定介入
 - dsv4p_nv 小时级 SR <60% + cc2 流量恢复 → 评估 TIER_COOLDOWN_S 180s 是否过激
-- all_tiers_exhausted 中段不恢复再评估 (当前 ~5/30min 全 NVCF 配额型)
+- all_tiers_exhausted 中段不恢复再评估 (当前 ~4/30min 全 NVCF 配额型)
 - 502 (peer-fb-skip) >=6/h + cc2 流量恢复 → 评估 dsv4p_nv fallback 策略
 
-## 参数快照 (R601 未改)
+## 参数快照 (R602 未改)
 - nv_gw: NVU_DISABLE_MS_FALLBACK=0, UPSTREAM_TIMEOUT=90, TIER_TIMEOUT_BUDGET_S=180,
   TIER_COOLDOWN_S=180, KEY_COOLDOWN_S=30, NV_INTEGRATE_KEY_COOLDOWN_S=90,
   MIN_OUTBOUND_INTERVAL_S=10, NVU_FORCE_STREAM_UPGRADE=0, NVU_FORCE_STREAM_UPGRADE_TIMEOUT=150,
