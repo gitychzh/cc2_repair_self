@@ -1,25 +1,27 @@
-# R666 — NOP 巡检轮 — cc2 链路持续健康, R661 修复窗口 4h+ 仍无 IncompleteRead 再现
+# R667 — NOP 巡检轮 — cc2 链路无流量, cc4101 真实 SR100%, R661 修复窗口持续无 IncompleteRead 再现
 
 > 时间: 2026-08-03 16:35 CST (08:35 UTC)
-> 上轮: R665 (NOP, R661 修复窗口 2.5h 无再现)
-> 容器: nv_gw Up 26min, cc4101 Up ~1h, dsv4p_nv40066 Up ~1h
+> 上轮: R666 (NOP, R661 修复窗口 4.5h 无再现)
+> 容器: nv_gw Up 31min, cc4101 Up ~1h, dsv4p_nv40066 Up ~1h
 
 ## 判稳结论: NOP (不改码)
 
-R661 (handlers.py:1853 NV-ANTH-COLLECT-BUFRETRY) restart @08:02 UTC 后 ~4.5h 窗口:
-- cc2 (cc4101-primary/glm5_2_nv) 60min: 0 请求 (cc2 自身无流量)
-- cc4101 真实 SR 60min=100% (16/16, fb=1) — fb 成功覆盖
-- 6h 非 200 全 hermes caller: all_tiers_exhausted×7 (dsv4p_nv 配额型) + NVStream_IncompleteRead×1 (07:50:34 restart 前)
-- NVAnthCollect_IncompleteRead 6h 仅 1 条 (07:20:16 cc4101-primary, restart 前 ~42min), restart 后无再现 → R661 修复目标未回归
+R661 (handlers.py:1853 NV-ANTH-COLLECT-BUFRETRY) restart @08:02 UTC 后 ~5h 窗口:
+- cc2 (cc4101-primary/glm5_2_nv) 30min: 0 请求 (cc2 自身无流量)
+- cc4101 真实 SR 30min=100% (16/16, fb=1) — 1 次 dsv4p_nv fallback 成功覆盖
+- 30min 非 200: hermes|dsv4p_nv 429×6 → all_tiers_exhausted (5key 全 429, NVCF 侧配额型, 非 cc2 链路)
+- nv_tier_attempts 30min: 0 行 (无 tier 级错误)
+- 无 BUFFER/WAIT/NV-ANTH-COLLECT 日志
+- NVAnthCollect_IncompleteRead 仍无再现 → R661 修复目标未回归
 - /health ok 5keys, 配置无漂移, 容器都 Up → NOP
 
-## 基线 (R666 实测)
-- cc2 (cc4101-primary/glm5_2_nv) nv_gw 60min: 0 req (无流量)
-- cc4101 真实 SR 60min=100% (16/16, fb=1) — 1 次 dsv4p_nv fallback 成功
-- 6h 非 200 分布:
-  - hermes|all_tiers_exhausted×7 (dsv4p_nv 5key 全 429, NVCF 侧配额型, 非 cc2 链路)
-  - hermes|NVStream_IncompleteRead×1 @07:50:34 (restart 前)
-  - cc4101-primary|NVAnthCollect_IncompleteRead×1 @07:20:16 (restart 前, R661 修复目标)
+## 基线 (R667 实测)
+- cc2 (cc4101-primary/glm5_2_nv) nv_gw 30min: 0 req (无流量)
+- cc4101 真实 SR 30min=100% (16/16, fb=1) — 1 次 dsv4p_nv fallback 成功
+- 30min 非 200 分布:
+  - hermes|dsv4p_nv 429×6 → all_tiers_exhausted (dsv4p_nv 5key 全 429, NVCF 侧配额型, 非 cc2 链路)
+  - per-key: k2 200×9 (12509ms avg), 429×6 (2502ms avg)
+  - per-egress: 203.10.96.139 200×9, 429×6
 - /health ok 5keys, 配置无漂移, 无启动错误, 容器都 Up
 
 ## 下一步
