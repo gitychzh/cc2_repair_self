@@ -1,20 +1,20 @@
-# R551 — NOP 巡检轮 (2026-08-03 08:30 CST)
+# R552 — NOP 巡检轮 (2026-08-03 08:35 CST)
 
 ## 摘要
-- 0 改动 0 restart. NOP 接棒巡检轮 (延续 R525-R550 间歇空闲窗口).
+- 0 改动 0 restart. NOP 接棒巡检轮 (延续 R525-R551 间歇空闲窗口).
 - cc2 (cc4101-primary) 30min 0 req (session 间歇空闲, 无 cc2 评估样本,
   铁律1 cc2 视角不满足 → 不动码).
 - dsv4p_nv 30min: 6 req SR=0.0% (0×200 + 6×429), 全 `hermes` caller.
-  与 R545-R550 完全一致模式 (R544=37.5%, R545-R550=0%, 6 req 样本落在
+  与 R545-R551 完全一致模式 (R544=37.5%, R545-R551=0%, 6 req 样本落在
   NVCF 配额波动区间低端, 非 nv_gw 侧新故障, k2 在本轮窗口未命中配额空隙).
-- 唯一错误类型 `all_tiers_exhausted` × 6 (avg_dur=1262ms, 与 R550 的 1267ms /
-  R549 的 1267ms / R548 的 1276ms / R547 的 1277ms / R546 的 1250ms 一致 —
-  KeyManager 全局冷却在 tier 层前拦截, tier_attempts 0 行, 历史一致).
+- 唯一错误类型 `all_tiers_exhausted` × 6 (avg_dur=1270ms, 与 R551 的 1262ms /
+  R550 的 1267ms / R549 的 1267ms / R548 的 1276ms / R547 的 1277ms /
+  R546 的 1250ms 一致 — KeyManager 全局冷却在 tier 层前拦截, tier_attempts 0 行, 历史一致).
 - NV-GLOBAL-COOLDOWN tier=dsv4p_nv 周期性 429 仍在 (每 5min 1 次, 共 6 次,
-  与 R268-R550 完全一致), NVCF 侧配额波动.
+  与 R268-R551 完全一致), NVCF 侧配额波动.
 - 无 stream_total_deadline, 无 zombie_empty_completion, 无 buffer/wait 日志
   (dsv4p_nv 在 peer-fb-skip, nv_gw 层裸返不走 buffer), deadline 链对齐 OK.
-- 配置实测与 R475-R550 完全一致, 无漂移.
+- 配置实测与 R475-R551 完全一致, 无漂移.
 
 ## 本轮改动
 - 无 (NOP). 铁律1 cc2 视角不满足 (cc2 0 流量无评估样本) → 不动码.
@@ -22,7 +22,7 @@
 ## 依据
 - cc2 30min 0 req → 无 cc2 评估样本 (铁律1 cc2 视角不满足)
 - dsv4p_nv 6 req: 0×200 + 6×429 (每 5min GLOBAL-COOLDOWN 180s 全挂)
-- 唯一错误类型: `all_tiers_exhausted` × 6, avg_dur=1262ms (全 NVCF 配额型, 非 nv_gw 故障)
+- 唯一错误类型: `all_tiers_exhausted` × 6, avg_dur=1270ms (全 NVCF 配额型, 非 nv_gw 故障)
 - nv_tier_attempts 0 行 = 429 在 tier 层前被 KeyManager 全局冷却拦截, 历史一致
 - 无新错误类型, 无 stream_total_deadline → 无参数回退必要
 - 配置无漂移 → 无参数回退必要
@@ -31,8 +31,8 @@
 - 0 restart → 无需 py_compile / curl 复测
 - curl /health: status=ok, nv_num_keys=5, nv_default_model=glm5_2_nv,
   nvcf_pexec_models=[kimi_nv,dsv4p_nv,glm5_2_nv], port=40006
-- docker ps: nv_gw Up 18h, nv_gw_stable Up 30h, cc4101 Up 8h, ms_gw Up 3 days, logs_db Up 3 days
-- 配置实测与 R475-R550 完全一致, 无漂移
+- docker ps: nv_gw Up 18h, nv_gw_stable Up 31h, cc4101 Up 8h, ms_gw Up 3 days, logs_db Up 3 days
+- 配置实测与 R475-R551 完全一致, 无漂移
 
 ## Fallback 配置实测 (持续)
 - `NVU_DISABLE_MS_FALLBACK=0` (ms fallback 启用, 但只覆盖 glm5_2_nv)
