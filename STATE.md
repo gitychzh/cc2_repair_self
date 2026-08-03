@@ -1,25 +1,24 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: R726 (NOP 巡检, 2026-08-03 20:45 CST)
-> 上轮: R725 (NOP, cc2 流量恢复 16req SR100% fb6.3%)
+> 当前轮: R727 (NOP 巡检, 2026-08-03 20:50 CST)
+> 上轮: R726 (NOP, cc2 零流量 dsv4p_nv 100% 61/61)
 
-## 本轮 (R726) 改了什么 + 依据 + 验证
+## 本轮 (R727) 改了什么 + 依据 + 验证
 
 ### 改动: 不改码 (NOP)
 
-### 依据 (30min + 6h 交叉验证)
-- **cc2 (cc4101) 30min**: 16 req, 16×200 = 可见 SR **100.0%**
-  - fallback 触发率 1/16 = **6.3%** (目标 <10%, 达标)
-- **nv_gw 全量 30min**: dsv4p_nv 62×200 = SR **100.0%**, glm5_2_nv 0 req
+### 依据 (30min 窗口)
+- **cc2 (cc4101-primary) 30min**: 零流量 (无请求, 非链路故障)
+- **nv_gw 全量 30min**: dsv4p_nv 61×200 = SR **100.0%** (hermes caller, 非 cc2)
+  - glm5_2_nv 0 req
 - **错误分类 30min**: 0 错误 (无新错误类型)
 - **tier attempts 30min**: 0 行 (glm5_2_nv 无 tier 流量)
 - **buffer/wait 日志**: 0 行 (无触发)
-- **6h SR (更大小本)**:
-  - glm5_2_nv: 29×200/19×502 = SR **60.4%** (48 req 低流量)
-    - tier: pexec_conn_RD×19, pexec_success×17, IntegrateRD×15, integrate_conn_RD×7, SSLEOF×4, pexec_500×1
-    - 全 NVCF 上游连接断开/配额副作用, 非 nv_gw 可控
-  - dsv4p_nv: 405×200/18×429/17×502 = SR **92.0%** (440 req 高流量, 主力稳定)
-- **根因**: glm5_2_nv 6h SR 60.4% 低流量下 NVCF 上游连接断开, 但 cc4101 fallback dsv4p 兜底 → 用户可见 SR 100%, fb 6.3% 达标
+- **per-key (dsv4p)**: k0=14, k1=11, k2=14, k3=12, k4=10 — 均衡全 200
+- **per-egress-IP**: 5 US IPv4 全 100%
+- **dsv4p 延迟**: avg 6.8s, max 35.6s, ttfb 6.5s — 正常
+- **finish_reason**: tool_calls×27, stop×26, length×8 — 无 zombie
+- **根因**: cc2 零流量 = 用户无请求 (R725 16req→R726 16req→R727 0req 波动正常), dsv4p 100% 主力稳定
 
 ### 验证: NOP 无需 restart
 - `/health`: nv_gw ok(5keys) + cc4101 ok(primary=glm5_2_nv) + dsv4p_nv40066 ok(5keys) — 全 ok
@@ -28,7 +27,7 @@
 
 ## 下一步
 - 持续监控 cc2 SR + fallback 触发率 (目标 SR99%+ fb<10%)
-- glm5_2_nv 6h SR 60.4% 低流量, k2 pexec conn_RD 持续重灾 — 若流量恢复后 fb>10% 再深入查
+- glm5_2_nv 流量恢复后深入查 6h SR 60.4% 根因 (k2 pexec conn_RD 持续重灾)
 - R661 post-restart ~43h+ 配置稳定, 无新错误类型
 
 ## 参数快照 (无变化, 沿用 R661)
