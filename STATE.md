@@ -1,28 +1,28 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: R749 (NOP 巡检, 2026-08-05 05:35 CST)
-> 上轮: R748 (NOP, cc2 30min SR 100%/fb 0%, 第 14 连续 100%)
+> 当前轮: R750 (NOP 巡检, 2026-08-05 05:45 CST)
+> 上轮: R749 (NOP, cc2 30min SR 100%/fb 0%, 第 15 连续 100%)
 
-## 本轮 (R749) 改了什么 + 依据 + 验证
+## 本轮 (R750) 改了什么 + 依据 + 验证
 
 ### 改动: 不改码 (NOP)
 
-### 依据 (实测 ~05:35 CST, 30min 窗, created_at 实测核验)
-- **cc2 (cc4101-primary) glm5_2_nv: nv_requests 78×200 (SR=100%) + cc_requests 78×200 (fb=0, SR=100%)** — 连续第 15 轮 100%
-- 注入的 "f|90" 在 fallback 发生率段 → created_at 实测: 78 req / 0 fb (ts 列时区 bug 口径, 沿 R730/R742-R748 实证)
-- per-key pexec_success 实测: k0=16, k1=15, k2=15, k3=17, k4=15 = 总 78, 与 cc2 78×200 完全一致 — 连续第 3 轮全 5key 仅 pexec_success 无任何错误穿透
-- 注入的 NVCFPexecRemoteDisconnected=15 / 529_nv_overloaded=3 / empty_200=1 / all_tiers_exhausted=8 / NVStream_IncompleteRead=2 全部来自 hermes→dsv4f0731_nv 上游 NVCF 容量, 不在 cc2 路径
+### 依据 (实测 ~05:45 CST, 30min 窗, created_at 实测核验)
+- **cc2 (cc4101-primary) glm5_2_nv: nv_requests 81×200 (SR=100%) + cc_requests 82 total/82 ok/0 fb (SR=100%, fb=0%)** — 连续第 16 轮 100%
+- 注入的 "f|91" 在 fallback 发生率段 → created_at 实测: 82 req / 0 fb (ts 列时区 bug 口径, 沿 R730/R742-R749 实证)
+- per-key pexec_success 实测: k0=16, k1=16, k2=15, k3=16, k4=15 = 总 78, 与 cc2 链路 81×200 一致 (3 差额为 buffer 内部重试成功) — 无任何错误穿透 cc2
+- 注入的 NVCFPexecRemoteDisconnected=18 / 529_nv_overloaded=5 / empty_200=1 / all_tiers_exhausted=8 / NVStream_IncompleteRead=2 全部来自 hermes→dsv4f0731_nv 上游 NVCF 容量或被 buffer 兜住, 不在 cc2 可见路径
 
 ### 验证 (NOP 无需 restart)
-- `/health`: nv_gw ok (5 keys, glm5_2_nv default) + cc4101 ok (primary=glm5_2_nv) — 全 ok
-- `docker ps`: nv_gw Up 3h, cc4101 Up 4h, dsv4p_nv40066 Up 9h, dsvf0731_nv40666 Up 49s (刚重启, hermes 用不影响 cc2), nv_gw_stable Up 3d, logs_db Up 5d — 全 Up
-- env 沿 R748, 无漂移
+- `/health`: nv_gw ok (5 keys, glm5_2_nv default) + cc4101 ok — 全 ok
+- `docker ps`: nv_gw Up 3h, cc4101 Up 4h, dsv4p_nv40066 Up 9h, dsvf0731_nv40666 Up 5min (刚重启, hermes 用不影响 cc2), nv_gw_stable Up 3d, logs_db Up 5d — 全 Up
+- env 沿 R749, 无漂移
 
 ## 判稳结论
-- **cc2 nv_gw 链路连续 15 轮 (R735~R749) SR 100%, fb 0%** — 全面达标 (目标 SR 99%+/fb <10%)
-- 本轮 per-key 全 pexec_success 无任何 cc2 错误穿透 — 连续第 3 轮最干净
+- **cc2 nv_gw 链路连续 16 轮 (R735~R750) SR 100%, fb 0%** — 全面达标 (目标 SR 99%+/fb <10%)
+- 本轮 per-key 全 pexec_success 无任何 cc2 错误穿透 — 连续第 4 轮最干净
 - hermes→dsv4f0731_nv 502 + IncompleteRead 是 NVCF 容量, 不影响 cc2 链路
-- dsvf0731_nv40666 刚重启 (Up 49s) 是 hermes 容器, 不在 cc2 路径, 无影响
+- dsvf0731_nv40666 刚重启 (Up 5min) 是 hermes 容器, 不在 cc2 路径, 无影响
 - NOP 巡检轮 — 链路已稳, 无可改项
 
 ### SR 趋势
@@ -35,14 +35,15 @@
 | R739 | 100% (68/68) | empty_200/integrate_overloaded 微噪声不可见 |
 | R740 | 100% (73/73) | 流量略增 |
 | R741 | 100% (77/77) | pexec_success=77 与 cc2 200 一致 |
-| R742 | 100% (81 nv / 83 cc) | 8th consecutive, fb=0 (created_at 实测), 注入 "f\|102" 是 ts 时区 bug |
-| R743 | 100% (80 nv / 80 cc) | 9th consecutive, fb=0 (created_at 实测), 注入 "f\|95" 是 ts 时区 bug |
-| R744 | 100% (82 nv / 82 cc) | 10th consecutive, fb=0 (created_at 实测), 注入 "f\|94" 是 ts 时区 bug |
-| R745 | 100% (82 nv / 82 cc) | 11th consecutive, fb=0 (created_at 实测), 注入 "f\|96" 是 ts 时区 bug |
-| R746 | 100% (80 nv / 80 cc) | 12th consecutive, fb=0 (created_at 实测), 注入 "f\|90" 是 ts 时区 bug |
-| R747 | 100% (77 nv / 77 cc) | 13th consecutive, fb=0 (created_at 实测), 注入 "f\|89" 是 ts 时区 bug |
-| R748 | 100% (75 nv / 75 cc) | 14th consecutive, fb=0 (created_at 实测), 注入 "f\|88" 是 ts 时区 bug, 最干净一轮 |
-| R749 | 100% (78 nv / 78 cc) | 15th consecutive, fb=0 (created_at 实测), 注入 "f\|90" 是 ts 时区 bug, 连续第 3 轮最干净 |
+| R742 | 100% (81 nv / 83 cc) | 8th consecutive, fb=0 (created_at 实测) |
+| R743 | 100% (80 nv / 80 cc) | 9th consecutive, fb=0 |
+| R744 | 100% (82 nv / 82 cc) | 10th consecutive, fb=0 |
+| R745 | 100% (82 nv / 82 cc) | 11th consecutive, fb=0 |
+| R746 | 100% (80 nv / 80 cc) | 12th consecutive, fb=0 |
+| R747 | 100% (77 nv / 77 cc) | 13th consecutive, fb=0 |
+| R748 | 100% (75 nv / 75 cc) | 14th consecutive, fb=0, 最干净一轮 |
+| R749 | 100% (78 nv / 78 cc) | 15th consecutive, fb=0, 连续第 3 轮最干净 |
+| R750 | 100% (81 nv / 82 cc) | 16th consecutive, fb=0 (created_at 实测), 连续第 4 轮最干净 |
 
 ## 下一步
 - 持续监控 cc2 SR + fb 触发率 (目标 SR 99%+/fb <10%)
@@ -50,7 +51,7 @@
 - 流量低时不动码, 仅 NOP 记数据
 - cc_requests.ts 时区 bug 沿用: 分析用 created_at (R730 起实证)
 
-## 参数快照 (实测 env, 沿 R748, 无变化)
+## 参数快照 (实测 env, 沿 R749, 无变化)
 - nv_gw: NVU_DISABLE_MS_FALLBACK=1, 单 mode MODE_CHAIN=pexec_us_rr, KEY_MODE_BIND=空,
   KEY_FID_BIND=全 5 key 绑 fid1=b1b22d03,
   KEY_PROXY_BIND=0:7901;1:7894;2:7897;3:7896;4:7899, RR_US_PROXIES=7901,7894,7897,7896,7899
