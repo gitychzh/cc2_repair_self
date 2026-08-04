@@ -1,27 +1,27 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: R753 (NOP 巡检, 2026-08-05 06:12 CST)
-> 上轮: R752 (NOP, cc2 30min SR 100%/fb 0%, 第 18 连续 100%)
+> 当前轮: R754 (NOP 巡检, 2026-08-05 06:18 CST)
+> 上轮: R753 (NOP, cc2 30min SR 100%/fb 0%, 第 19 连续 100%)
 
-## 本轮 (R753) 改了什么 + 依据 + 验证
+## 本轮 (R754) 改了什么 + 依据 + 验证
 
 ### 改动: 不改码 (NOP)
 
-### 依据 (实测 ~06:12 CST created_at 实测核验)
-- **cc2 (cc4101-primary) glm5_2_nv: nv_requests 83×200 (SR=100%) + cc_requests 84 total/84 ok/0 fb (SR=100%, fb=0%)** — 连续第 19 轮 100%
-- 注入的 "f|103" 在 fallback 发生率段 → created_at 实测: 84 req / 0 fb (ts 列时区 bug 口径, 沿 R730/R742-R752 实证)
-- per-key pexec_success 实测 (created_at 口径): k0=18, k1=17, k2=17, k3=16, k4=16 = 总 84, 与 cc2 链路 84×200 完全一致 (零差额) — 无任何错误穿透 cc2
-- 注入的 NVCFPexecRemoteDisconnected=17 / 529_nv_overloaded=5 / empty_200=2 / all_tiers_exhausted=7 / NVStream_IncompleteRead=1 全部来自 hermes→dsv4f0731_nv 上游 NVCF 容量或被 buffer 兜住, 不在 cc2 可见路径
+### 依据 (实测 ~06:18 CST created_at 实测核验)
+- **cc2 (cc4101-primary) glm5_2_nv: nv_requests 87×200 (SR=100%) + cc_requests 87 total/87 ok/0 fb (SR=100%, fb=0%)** — 连续第 20 轮 100%
+- 注入的 "f|106" 在 fallback 发生率段 → created_at 实测: 87 req / 0 fb (ts 列时区 bug 口径, 沿 R730/R742-R753 实证)
+- per-key pexec_success 实测 (created_at 口径): k0=19, k1=17, k2=17, k3=18, k4=16 = 总 87, 与 cc2 链路 87×200 完全一致 (零差额) — 无任何错误穿透 cc2
+- 注入的 NVCFPexecRemoteDisconnected=15 / 529_nv_overloaded=5 / empty_200=4 全部来自 NVCF 容量波动或被 buffer 兜住, 不在 cc2 可见路径
 
 ### 验证 (NOP 无需 restart)
 - `/health`: nv_gw ok (5 keys, glm5_2_nv default) — 全 ok
 - `docker ps`: nv_gw Up 3h, cc4101 Up 4h, dsv4p_nv40066 Up 9h, nv_gw_stable Up 3d, logs_db Up 5d — 全 Up
-- env 沿 R752, 无漂移
+- env 沿 R753, 无漂移
 
 ## 判稳结论
-- **cc2 nv_gw 链路连续 19 轮 (R735~R753) SR 100%, fb 0%** — 全面达标 (目标 SR 99%+/fb <10%)
-- 本轮 per-key 全 pexec_success 无任何 cc2 错误穿透 — 连续第 7 轮最干净
-- 注入噪声全来自 hermes→dsv4f0731_nv NVCF 容量, 被 buffer 兜住, 不影响 cc2 链路
+- **cc2 nv_gw 链路连续 20 轮 (R735~R754) SR 100%, fb 0%** — 全面达标 (目标 SR 99%+/fb <10%)
+- 本轮 per-key 全 pexec_success 无任何 cc2 错误穿透 — 连续第 8 轮最干净
+- 注入噪声全来自 NVCF 容量, 被 buffer 兜住, 不影响 cc2 链路
 - NOP 巡检轮 — 链路已稳, 无可改项
 
 ### SR 趋势
@@ -46,14 +46,15 @@
 | R751 | 100% (83 nv / 83 cc) | 17th consecutive, fb=0, 连续第 5 轮最干净 |
 | R752 | 100% (84 nv / 84 cc) | 18th consecutive, fb=0, 连续第 6 轮最干净 |
 | R753 | 100% (84 nv / 84 cc) | 19th consecutive, fb=0, 连续第 7 轮最干净 |
+| R754 | 100% (87 nv / 87 cc) | 20th consecutive, fb=0, 连续第 8 轮最干净 |
 
 ## 下一步
 - 持续监控 cc2 SR + fb 触发率 (目标 SR 99%+/fb <10%)
-- 注入噪声 (529/empty_200/NVCFPexecRemoteDisconnected/all_tiers_exhausted) 持续观察, 若泄漏到 cc2 (buffer 失效) 再查
+- 注入噪声 (529/empty_200/NVCFPexecRemoteDisconnected) 持续观察, 若泄漏到 cc2 (buffer 失效) 再查
 - 流量低时不动码, 仅 NOP 记数据
 - cc_requests.ts 时区 bug 沿用: 分析用 created_at (R730 起实证)
 
-## 参数快照 (实测 env, 沿 R752, 无变化)
+## 参数快照 (实测 env, 沿 R753, 无变化)
 - nv_gw: NVU_DISABLE_MS_FALLBACK=1, 单 mode MODE_CHAIN=pexec_us_rr, KEY_MODE_BIND=空,
   KEY_FID_BIND=全 5 key 绑 fid1=b1b22d03,
   KEY_PROXY_BIND=0:7901;1:7894;2:7897;3:7896;4:7899, RR_US_PROXIES=7901,7894,7897,7896,7899
