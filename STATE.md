@@ -1,46 +1,47 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: R763 (NOP 巡检, 2026-08-05 ~06:42 CST)
-> 上轮: R762 (NOP, cc2 30min SR 100%/fb 0%, 第 28 连续 100%)
+> 当前轮: R766 (NOP 巡检, 2026-08-05 ~07:00 CST)
+> 上轮: R765 (NOP, cc2 30min SR 100%/fb 0%, 第 31 连续 100%)
 
-## 本轮 (R763) 改了什么 + 依据 + 验证
+## 本轮 (R766) 改了什么 + 依据 + 验证
 
 ### 改动: 不改码 (NOP)
 
-### 依据 (created_at 实测校验, ~06:42 CST)
-- **cc2 (cc4101-primary) glm5_2_nv: nv_requests 100×200 (SR=100%), cc_requests 100 total / 100 ok / fb=0** — 连续第 29 轮 100%
-- glm5_2_nv tier: 105 pexec_success + 1 pexec_429 (buffer 吸收, 零穿透 cc2) — 连续第 17 轮最干净
-- **5 key 全 0 错误** (per-key k0=21/k1=24/k2=19/k3=23/k4=19 全 pexec_success)
-- 注入数据噪声 (all_tiers_exhausted×5) 全来自非 cc2 tier (dsv4f0731_nv / dsv4f_nv), 零穿透 cc2
-  - dsv4f0731_nv SR=90.9% / dsv4f_nv SR=50% 是 hermes caller 自身链路问题, 非 cc2
-- 本轮再次实证: cc2 决策必须以 created_at 实测为准, 注入数据仅作背景参考
+### 依据 (created_at 实测校验, ~07:00 CST)
+- **cc2 (cc4101-primary) glm5_2_nv: nv_requests 81×200 (SR=100%), cc_requests 81 total / 81 ok / fb=0** — 连续第 32 轮 100%
+- glm5_2_nv tier: 81 pexec_success + 1 pexec_429 (k3, buffer 吸收, 零穿透 cc2) — 第 20 连续最干净轮
+- **5 key 全 0 错误** (除 k3 的 1×429): per-key k0=18/k1=15/k2=16/k3=17+1×429/k4=15 分布均衡
+- 注入数据噪声 (12 RemoteDisc + 3 529_nv_overloaded + 1 empty_200) 全是 ts 列时区 bug artifacts — created_at 实测全 0, 零穿透 cc2
+  - dsv4f0731_nv SR=92.1% / dsv4f_nv SR=0.0% 是 hermes caller 自身链路问题, 非 cc2
+- buffer 日志: 无 WAIT-/retry 异常 (轮前分析无 buffer 日志 = 无全挂场景)
 
 ### 验证 (NOP 无需 restart)
 - `/health`: nv_gw ok (nv_num_keys=5, pexec_models 含 glm5_2_nv), cc4101 ok (primary=glm5_2_nv) — 全 ok
-- `docker ps`: nv_gw Up 4h, cc4101 Up 5h, dsv4p_nv40066 Up 10h — 全 Up
+- `docker ps`: nv_gw Up 4h, cc4101 Up 5h, dsv4p_nv40066 Up 10h, logs_db Up 5 days — 全 Up
 
 ## 判稳结论
-- **cc2 nv_gw 链路连续 29 轮 (R735~R763) SR 100%, fb 0%** — 全面达标 (目标 SR 99%+/fb <10%)
-- 本轮 glm5_2_nv tier 1×pexec_429 (buffer 吸收) — 数量极小 (<1%), 不影响 cc2 可见 SR
-- 流量 100 req/30min (上轮 R762 实测 99→本轮 100, 稳定)
+- **cc2 nv_gw 链路连续 32 轮 (R735~R766) SR 100%, fb 0%** — 全面达标 (目标 SR 99%+/fb <10%)
+- 本轮 glm5_2_nv tier 1×pexec_429 (k3, buffer 吸收) — 数量极小 (~1%), 不影响 cc2 可见 SR
+- 流量 81 req/30min (上轮 R765 91→本轮 81, 略低但稳定)
+- k3 间歇 pexec_429 已持续 6 轮 (R761-R766), ~1%, 持续模式 — 观察累积趋势
 - NOP 巡检轮 — 链路已稳, 无可改项
 
 ### SR 趋势
 | 轮 | 30min 窗 SR | 备注 |
 |---|---|---|
-| R760 | 100% (85 nv / 87 cc) | 26th consecutive, fb=0, 14th cleanest (tier 零错误) |
-| R761 | 100% (90 nv / 90 cc) | 27th consecutive, fb=0, 15th cleanest (95 pexec + 1×429) |
-| R762 | 100% (99 nv / 99 cc) | 28th consecutive, fb=0, 16th cleanest (104 pexec + 1×429, 5key 全 0 错) |
-| R763 | 100% (100 nv / 100 cc) | **29th consecutive, fb=0, 17th cleanest (105 pexec + 1×429, 5key 全 0 错)** |
+| R763 | 100% (100/100) | 29th consecutive, 17th cleanest (105 pexec + 1×429, 5key 全 0 错) |
+| R764 | 100% (100/100) | 30th consecutive, 18th cleanest (105 pexec + 1×429, 5key 全 0 错) |
+| R765 | 100% (91/91) | 31st consecutive, 19th cleanest (97 pexec + 1×429, 5key 0 错除 k3 429) |
+| R766 | 100% (81/81) | **32nd consecutive, 20th cleanest (81 pexec + 1×429, 5key 0 错除 k3 429)** |
 
 ## 下一步
 - 持续监控 cc2 SR + fb 触发率 (目标 SR 99%+/fb <10%)
-- glm5_2_nv tier 间歇 pexec_429 (R761/R762/R763 各 1 次) — 数量极小 (<1%), 若累积或穿透 cc2 再查 KeyManager 退避状态
-- 注入数据噪声持续出现但 created_at 实测全 0 — 沿 ts 列时区 bug 解释
+- k3 间歇 pexec_429 持续 6 轮 (R761-R766) — ~1%, 若累积或穿透 cc2 再查 KeyManager 退避状态
+- 注入数据噪声持续出现但 created_at 实测全 0 — 沿 ts 列时区 bug 解释 (R730 起实证)
 - 流量稳定时不动码, 仅 NOP 记数据
 - cc_requests.ts 时区 bug 沿用: 分析用 created_at (R730 起实证)
 
-## 参数快照 (实测 env, 沿 R762, 无变化)
+## 参数快照 (实测 env, 沿 R765, 无变化)
 - nv_gw: NVU_DISABLE_MS_FALLBACK=1, 单 mode MODE_CHAIN=pexec_us_rr, KEY_MODE_BIND=空,
   KEY_FID_BIND=全 5 key 绑 fid1=b1b22d03,
   KEY_PROXY_BIND=0:7901;1:7894;2:7897;3:7896;4:7899, RR_US_PROXIES=7901,7894,7897,7896,7899
