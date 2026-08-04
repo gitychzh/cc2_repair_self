@@ -1,29 +1,26 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: R743 (NOP 巡检, 2026-08-05 05:12 CST)
-> 上轮: R742 (NOP, cc2 30min SR 100%/fb 0%, 第 8 连续 100%)
+> 当前轮: R744 (NOP 巡检, 2026-08-05 05:18 CST)
+> 上轮: R743 (NOP, cc2 30min SR 100%/fb 0%, 第 9 连续 100%)
 
-## 本轮 (R743) 改了什么 + 依据 + 验证
+## 本轮 (R744) 改了什么 + 依据 + 验证
 
 ### 改动: 不改码 (NOP)
 
-### 依据 (实测 ~05:12 CST, 30min 窗, created_at 实测核验)
-- **cc2 (cc4101-primary) glm5_2_nv: nv_requests 80×200 (SR=100%) + cc_requests 80×200 (SR=100%, fb=0)** — 连续第 9 轮 100%
-- per-key tier 分布: k0-k4 各 15-16 pexec_success ≈ 77 (快照), created_at 复测 80×200
-- 529_nv_overloaded 散布全 key (k0:5, k1:2, k2:3, k3:2, k4:3) + NVCFPexecRemoteDisconnected (各 2-3) → 被 buffer 兜住
-- k1/k3 empty_200×1, k4 529_integrate_overloaded×1 — 微噪声, cc2 不可见
-- hermes→dsv4f0731_nv: 12×200 + 6×502 (SR 66.7%) — NVCF 容量, 非 cc2 链路
-- 全 caller 错误: all_tiers_exhausted × 5 + NVStream_IncompleteRead × 1 (均来自 hermes→dsv4f0731_nv)
-- ⚠️ 注入数据 "f|95" 是 ts 列时区 bug 口径的截断行, 非真实 fb 计数; created_at 实测: 80 req / 0 fb
-- ⚠️ cc_requests.ts 时区 bug 沿用 (R730 实证): ts 列拉到旧数据混入, 用 created_at 才是真实当前 30min
+### 依据 (实测 ~05:18 CST, 30min 窗, created_at 实测核验)
+- **cc2 (cc4101-primary) glm5_2_nv: nv_requests 82×200 (SR=100%) + cc_requests 82×200 (SR=100%, fb=0)** — 连续第 10 轮 100%
+- 注入的 "f|94" 在 fallback 发生率段 → created_at 实测: 82 req / 0 fb (ts 列时区 bug 口径, 沿 R730/R742/R743 实证)
+- per-key tier 分布 (注入快照): k0-k4 各 15-16 pexec_success ≈ 80, 529_nv_overloaded 散布全 key + NVCFPexecRemoteDisconnected 各 2-3 → 被 buffer 兜住
+- hermes→dsv4f0731_nv: 9×200 + 6×502 (SR 60%) — NVCF 容量, 非 cc2 链路 (cc4101 primary/fallback 均未指向此容器)
+- 全 caller 错误: all_tiers_exhausted × 4 + NVStream_IncompleteRead × 2 (均来自 hermes→dsv4f0731_nv)
 
 ### 验证 (NOP 无需 restart)
 - `/health`: nv_gw ok (5 keys, glm5_2_nv default) + cc4101 ok (primary=glm5_2_nv) — 全 ok
-- `docker ps`: nv_gw Up 2h, cc4101 Up 4h, dsv4p_nv40066 Up 9h, dsvf0731_nv40666 Up ~1h — 全 Up
-- env 沿 R742, 无漂移
+- `docker ps`: nv_gw Up 2h, cc4101 Up 4h, dsv4p_nv40066 Up 9h, dsvf0731_nv40666 Up ~1h, nv_gw_stable Up 3d — 全 Up
+- env 沿 R743, 无漂移
 
 ## 判稳结论
-- **cc2 nv_gw 链路连续 9 轮 (R735~R743) SR 100%, fb 0%** — 全面达标
+- **cc2 nv_gw 链路连续 10 轮 (R735~R744) SR 100%, fb 0%** — 全面达标, 里程碑
 - 529 storm + empty_200/integrate_overloaded 微噪声持续, 但被 buffer 兜住, cc2 不可见
 - hermes 6×502 是 dsv4f0731_nv NVCF 容量, 不是 cc2 链路
 - NOP 巡检轮 — 链路已稳, 无可改项
@@ -40,6 +37,7 @@
 | R741 | 100% (77/77) | pexec_success=77 与 cc2 200 一致 |
 | R742 | 100% (81 nv / 83 cc) | 8th consecutive, fb=0 (created_at 实测), 注入 "f\|102" 是 ts 时区 bug |
 | R743 | 100% (80 nv / 80 cc) | 9th consecutive, fb=0 (created_at 实测), 注入 "f\|95" 是 ts 时区 bug |
+| R744 | 100% (82 nv / 82 cc) | 10th consecutive, fb=0 (created_at 实测), 注入 "f\|94" 是 ts 时区 bug |
 
 ## 下一步
 - 持续监控 cc2 SR + fb 触发率 (目标 SR 99%+ / fb <10%)
@@ -47,7 +45,7 @@
 - 流量低时不动码, 仅 NOP 记数据
 - cc_requests.ts 时区 bug 沿用: 分析用 created_at (R730 起实证)
 
-## 参数快照 (实测 env, 沿 R742, 无变化)
+## 参数快照 (实测 env, 沿 R743, 无变化)
 - nv_gw: NVU_DISABLE_MS_FALLBACK=1, 单 mode MODE_CHAIN=pexec_us_rr, KEY_MODE_BIND=空,
   KEY_FID_BIND=全 5 key 绑 fid1=b1b22d03,
   KEY_PROXY_BIND=0:7901;1:7894;2:7897;3:7896;4:7899, RR_US_PROXIES=7901,7894,7897,7896,7899
