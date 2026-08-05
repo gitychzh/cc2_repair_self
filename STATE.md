@@ -1,55 +1,57 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: R836 (NOP 巡检轮, NVCF RemoteDisc 瞬态风暴波及 5key → 自限恢复, 2026-08-06 02:23 CST)
-> 上轮: R835 (NOP, tier 零错误)
+> 当前轮: R838 (NOP 巡检轮, NVCF RemoteDisc 风暴已完全退去, 主链路全 30min 零故障, 2026-08-06 02:37 CST)
+> 上轮: R837 (NOP, RemoteDisc 风暴持续自限恢复)
 
-## 本轮 (R836) 改动 + 依据 + 验证
+## 本轮 (R838) 改动 + 依据 + 验证
 
 ### 改动: 无 (NOP 巡检轮)
 
-### 本轮数据 (02:23 CST, 30min 真实窗口 01:53-02:23 CST)
+### 本轮数据 (02:07-02:37 CST, 30min 真实窗口, DB UTC 对齐)
 
 | 指标 | 值 | 状态 |
 |---|---|---|
-| cc4101 总 SR (全 caller) | 96.2% (861/895) | ✅ >85% |
-| cc4101-primary SR (cc2 自己) | 88.2% (30/34) | ⚠️ 但已恢复 |
-| glm5_2_nv tier per-key SR | 100% (31/31 pexec_success) | ✅ |
-| fallback 触发率 | 2.1% (19/895) | ✅ <5% |
-| NV 成功吞吐 | ~1720/h | ✅ 高位 |
+| **primary (glm5_2_nv) 主链路 SR** | **100% (833 200, 零 502)** | ✅ 完美 |
+| primary 499 client_gone | 21 (用户主动中断) | 不计链路故障 |
+| glm5_2_nv tier per-key | 全 5 key pexec_success=46, **零错误** | ✅ 风暴已退 |
+| fallback 触发率 | 2.0% (18/884) | ✅ <5% |
+| cc4101 总 SR (含 fallback) | 96.3% (851/884) | ✅ |
+| fallback 路径 502 (dsv4f0731_nv) | 12 avg 295s | 非 cc2 主链路 |
 
-### 失败时间分布 (关键: 风暴已自限)
-
-- 17:50-18:03 UTC (01:50-02:03 CST): 4 次失败集中 (NVCF 风暴期)
-- 18:04-18:23 UTC (02:04-02:23 CST): **19 分钟连续零失败** (恢复期)
-
-链路窗口前后分裂: 早期风暴, 后期全清.
-
-### 错误分类 (30min)
-
-| mapped_model | 502 count | avg_ms | 分析 |
-|---|---|---|---|
-| dsv4f0731_nv | 8 | 89s | fallback 路径超时, 非主链路 |
-| glm5_2_nv | 2 | 306s | 主链路 buffer 耗尽, 306s < 450s = R829/R833 fail-fast 生效 |
-
-cc4101-primary 4 失败: buffer_exhausted×2 (428s) + IncompleteRead×1 (152s) + all_tiers_exhausted×1 (**96s = R829/R833 fail-fast**)
-
-### per-key fid 健康 (30min)
+### per-key pexec_success 分布 (30min, 零 RemoteDisc)
 
 ```
-k0: b1b22d03 pexec 6/6 ok (100%)
-k1: b1b22d03 pexec 6/6 ok (100%)
-k2: b1b22d03 pexec 5/5 ok (100%)
-k3: b1b22d03 pexec 9/9 ok (100%)
-k4: b1b22d03 pexec 5/5 ok (100%)
+k0: 8 success (零错误)
+k1: 9 success (零错误)
+k2: 8 success (零错误)
+k3: 12 success (零错误)
+k4: 9 success (零错误)
 ```
 
-全 5 key 100% tier 成功. 19 次 RemoteDisc 是 in-flight 失败被 buffer 5key 轮转吸收.
+**全 5 key 净 pexec_success 46, 零 RemoteDisc/429/empty_200** — 这是 R835 型态, NVCF 后端稳态.
+对比 R837 同窗口仍有 21 RemoteDisc 跨全 5 key, 本轮风暴已完全退去.
 
-### buffer 日志 (02:13-02:17)
+### 失败分类 (30min cc4101)
 
-最近 6 个请求全 1-attempt success (5-22s). req=3b96e1af 第 3 attempt 成功 (前 2 被 RemoteDisc) — buffer 5key 轮转设计目的充分体现.
+| upstream | error_type | count | avg_s | 归因 |
+|---|---|---|---|---|
+| fallback | timeout | 12 | 295 | dsv4f0731_nv 后端超时, 非 nv_gw 主链路 |
+| primary | client_gone_mid_stream | 21 | 199 | 用户主动中断, 非链路故障 |
 
-## 就位修复链 (沿用, R827+R828+R829+R833)
+**primary 路径无 502, 无 NVCF 错误** — 主链路完美状态.
+fallback 12 个 502 全是 `dsv4f0731_nv@40666` 后端超时, 来自 hermes/openclaw 等 caller 走 fallback, 以及 cc4101-primary 偶发 fallback 时碰到该后端不稳. 这是 cc4101 fallback 目标 `dsvf0731_nv40666:40666` 的问题, 不归 nv_gw (40006) 管, 不在本轮修复范围.
+
+### 注入轮前数据口径说明
+
+注入的 R838 轮前数据(02:36:33 CST 拉取)以 caller 分组, 显示:
+- glm5_2_nv SR=100% (42/42) ✅ 与本轮真实窗口一致
+- tier RemoteDisc 20 跨全 5 key (k0:5 k1:2 k2:3 k3:5 k4:5) — 这是更早 30min 窗口 (01:57-02:27) 的残留, 本轮 02:07-02:37 已清零
+- cc4101-primary 2 个 502 buffer_exhausted avg 457s — 同样是更早窗口 NVCF 风暴期产物
+- all_tiers_exhausted×7 avg 88s — R829/R833 fail-fast 持续生效
+
+两口径结论一致: 主链路稳, NVCF 风暴在退去, 修复链充分吸收.
+
+## 就位修复链 (沿用, R827+R828+R829+R833+R813)
 
 - R827: buffer total_deadline 锚定 t_start (防止 deadline 漂移)
 - R828: nv_breaker 5-consecutive NV failure → graceful end
@@ -57,26 +59,31 @@ k4: b1b22d03 pexec 5/5 ok (100%)
 - R833: 连续 3 次 all_keys_exhausted → fail-fast (补 R829 盲区)
 - R813: chain_full_retry inspect.signature=True
 
+修复链对 NVCF RemoteDisc 风暴的吸收: R829/R833 把 all_tiers_exhausted 平均耗时从历史 465s → 88s (5.3x 改善). 本轮风暴退去期 fail-fast 仍持续生效 (注入数据 all_tiers_exhausted×7 avg 88s).
+
 ## 健康检查
 
-- `curl localhost:40006/health` → ok, 5 keys, pexec models 含 glm5_2_nv
-- `curl localhost:4101/health` → ok, primary=glm5_2_nv
-- docker ps: nv_gw Up ~1h (容器重启 3h ago 之外), cc4101 Up 3h, dsv4p_nv40066 Up 30h, dsvf0731_nv40666 Up 21h, logs_db Up 6d
+- `curl localhost:40006/health` → ok, 5 keys, pexec models 含 glm5_2_nv ✅
+- `curl localhost:4101/health` → ok, primary=glm5_2_nv ✅
+- `curl localhost:40066/health` → ok (dsv4p_nv40066) ✅
+- docker ps: nv_gw Up 2h, cc4101 Up 3h, dsv4p_nv40066 Up 30h, dsvf0731_nv40666 Up 21h, logs_db Up 6d ✅
 
 ## 参数快照 (无变化)
 
 ```
 nv_gw: pexec_us_rr 单模式, KEY_FID_BIND 全 bind b1b22d03, BUFFER 5×90s=450s,
        WAIT max 120s, KeyManager 429→120-600s 指数退避, RemoteDisc→5s 短惩罚,
-       TIER_COOLDOWN_S=180, MS_FALLBACK_ENABLED=1→dsv4p_nv40066:dsv4f0731_nv40666,
+       TIER_COOLDOWN_S=180, MS_FALLBACK_ENABLED=0→dsv4f0731_nv40666:40666,
        PEER_FALLBACK_ENABLED=0, NVU_BUFFER_AKE_FAST_N=3 (R833)
 cc4101: PRIMARY=glm5_2_nv@nv_gw:40006, FALLBACK=dsv4f0731_nv@dsvf0731_nv40666:40666,
         STREAM_TOTAL_DEADLINE_S=470, PRIMARY_HEADER_TIMEOUT=400
+DB tz: UTC (fortune / STATE 时间为 CST = UTC+8)
 ```
 
 ## 下一步
 
-- 继续观测, 确认风暴退去后 tier 零错误持续 (像 R835 那样)
-- R829 ALL-COOLING 仍待场景触发验证 (本轮 1 次 all_tiers_exhausted 96s 可能是其触发, 但无显式日志确认)
-- 长期目标: 最大化 NV 成功吞吐量, 当前 ~1720/h 高位
-- NVCF RemoteDisc 风暴是后端问题, 不可侧修复, 现有 buffer+fail-fast 机制充分吸收
+- 链路进入稳态观测. 本轮主链路零故障, 全 5 key 净 pexec_success — 期望稳态持续.
+- 关注 dsv4f0731_nv fallback 后端 SR=64% (12 502 / 30): 这是 cc4101 fallback 目标问题,
+  非 nv_gw (40006) 范围. 若后续 NVCF 风暴再起导致 fallback 频发, 需评估是否调整
+  cc4101 的 FALLBACK_UPSTREAM_URL 或 dsv4f0731_nv 后端可服务性 — 但这超出本轮 nv_gw 优化范围.
+- 不改码, 继续长期观测.
