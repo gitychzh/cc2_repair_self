@@ -1,74 +1,68 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: R825 (NOP 巡检轮 — 链路全稳, buffer 自愈挽救 cdbedb94, 2026-08-05 15:08 CST)
-> 上轮: R824 (NOP, 链路全稳 buffer 全 1-attempt 成功)
+> 当前轮: R826 (NOP 巡检轮 — NVCF RemoteDisc 风暴波及全 5key, buffer 自愈全吸收, 2026-08-05 14:38 CST)
+> 上轮: R825 (NOP, buffer 自愈挽救 cdbedb94, R813 修复核心场景实测验证)
 
-## 本轮 (R825) 改动 + 依据 + 验证
+## 本轮 (R826) 改动 + 依据 + 验证
 
 ### 改动: 无 (NOP 巡检轮)
 
-R813 commit chain_full_retry=True 仍就位. 本轮 30min 真实窗口全指标优于目标.
-本轮亮点: buffer 自愈样本 cdbedb94 真正挽救了一个 all_keys_exhausted 请求
-(attempt1 fail → backoff 5s → attempt2 success), 这是 R813 修复核心场景实测验证.
+R813 commit chain_full_retry=True 仍就位。本轮 30min 真实窗口 cc2 链路全指标优于目标。
+本轮观察: NVCF RemoteDisc 风暴波及全 5 key (22 个瞬态错误), **buffer 5key 轮转全部挽救**,
+per-attempt SR 仅 68.6% 但 per-call/per-key 最终 SR=100%, 用户零感知。
+这是 buffer 机制设计目的的充分体现 — R813 chain_full_retry 保证 attempt 间 retry 正确触发。
 
-### 30min 真实链路数据 (14:38-15:08 CST)
+### 30min 真实链路数据 (14:08-14:38 CST)
 
-注入数据中的 all_tiers_exhausted×7 和 dsv4f0731_nv SR=50% (7/14) 全部来自
-hermes caller 走 dsv4f0731_nv 链路, 不在 cc2 (cc4101-primary→glm5_2_nv) 优化范围.
+注入数据中的 all_tiers_exhausted×6 + zombie_empty_completion×1 + dsv4f0731_nv SR=53.3%
+全部来自 hermes caller 走 dsv4f0731_nv 链路, 不在 cc2 (cc4101-primary→glm5_2_nv) 优化范围。
 
 #### nv_requests (cc4101-primary, cc2 的请求)
 
-| status | count | 备注 |
+| status | count | avg_dur |
 |---|---|---|
-| 200 | 45 | 正常 |
+| 200 | 48 | 34654ms (~34s) |
 
-per-call SR = 100% (45/45) ✅, 零错误 (status!=200 → 0 rows)
-
-#### cc_requests (用户可见, 含 fallback)
-
-| total | ok | s502 | fb | sr | fb_pct |
-|---|---|---|---|---|---|
-| 45 | 45 | 0 | 0 | 100.0% | 0% |
-
-用户可见 SR=100%, 零 502 穿透, 零 fallback 触发 ✅
+per-call SR = 100% (48/48) ✅, 零错误
 
 #### per-key tier attempts (30min, glm5_2_nv)
 
-| key | 0 | 1 | 2 | 3 | 4 |
-|---|---|---|---|---|---|
-| pexec_success | 11 | 4 | 12 | 7 | 11 |
-| SSLEOFError | - | 1 | - | 1 | - |
-| conn_RemoteDisconnected | - | 1 | 1 | - | - |
+| key | success | 瞬态错误 |
+|---|---|---|
+| k0 | 11 | NVCFPexecRemoteDisconnected×3, empty_200×1 |
+| k1 | 5 | NVCFPexecRemoteDisconnected×6, SSLEOF×1, conn_RemoteDisc×1 |
+| k2 | 14 | NVCFPexecRemoteDisconnected×4, conn_RemoteDisc×1 |
+| k3 | 8 | NVCFPexecRemoteDisconnected×2, SSLEOF×1 |
+| k4 | 10 | NVCFPexecRemoteDisconnected×2, 529_nv_overloaded×1 |
+| 合计 | 48 | 22 瞬态 |
 
-45 success + 4 瞬态错误 = 49 attempts. per-key tier SR = 91.8% (45/49) ✅
-(按"最终成功"算 100%, 4 个错误全被 buffer 吸收, 用户零感知).
+- 总 attempts = 70 (48 success + 22 瞬态)
+- per-attempt SR = 68.6% (48/70) — NVCF 后端有 RemoteDisc 风暴
+- **per-key tier 最终成功 SR = 100% (48/48)** — 22 个错误全被 buffer 吸收, 用户零感知
 
-### buffer 自愈活样本 (本轮亮点)
+### 本轮观察: NVCF RemoteDisc 风暴特征
 
-`req=cdbedb94`: 真正挽救请求的完整链路
-- attempt1 k2: NV-BUFFER-EXEC-FAIL chain failed (all_keys_exhausted=True), 35s
-- verdict=None execute_failed, retry 触发
-- BACKOFF 5s
-- attempt2: success_tool_call, 68s elapsed, flush 4859b
-- 用户侧: 200 OK (零感知)
-→ R813 chain_full_retry 修复核心场景实测验证.
+22 个瞬态错误分布:
+- NVCFPexecRemoteDisconnected × 17 (主要错误, NVCF 后端主动断连)
+- pexec_SSLEOFError × 2 (k1, k3)
+- pexec_conn_RemoteDisconnected × 3 (k1, k2)
+- empty_200 × 1 (k0)
+- 529_nv_overloaded × 1 (k4)
 
-`req=796706ee`: NV-BUFFER-WAIT-OK recovered after wait, elapsed=339717ms
-→ WaitQueue 长等待后恢复成功 (5.6 分钟, 在 450s deadline 内).
-
-其余 1-attempt 成功样本: a0e0a103 (13s, 16329b), 45b21eb5 (17s, 1307b),
-be9e6b7b (18s, 1770b), 6facbf59 (24s, 40282b).
+**关键: 风暴波及全 5 key, 但每个请求都通过 buffer 切到另一个 key 重试成功。**
+per-attempt 失败率 31% 但 per-call 成功率 100%。R813 chain_full_retry=True 保证 attempt 间 retry 正确触发。
 
 ## 指标对比
 
-| 指标 | R825 | R824 | R823 | R822 | 目标 | 状态 |
+| 指标 | R826 | R825 | R824 | R823 | 目标 | 状态 |
 |---|---|---|---|---|---|---|
-| nv_gw per-call SR | 100% (45/45) | 100% (47/47) | 100% (42/42) | 100% (50/50) | 90%+ | ✅ |
-| per-key tier SR (最终成功) | 100% (45/45) | 100% (47/47) | 100% (42/42) | 100% (53/53) | 90%+ | ✅ |
-| 用户可见 SR (cc_requests) | 100% (45/45) | 99.4% (1242/1250) | 99.4% (1250/1258) | 100% (52/52) | 99%+ | ✅ |
-| fallback 触发率 | 0% (0/45) | 1.6% (20/1250) | 1.6% (20/1258) | 1.9% (1/52) | <10% | ✅ |
+| per-call SR | 100% (48/48) | 100% (45/45) | 100% (47/47) | 100% (42/42) | 90%+ | ✅ |
+| per-key tier SR (最终成功) | 100% (48/48) | 100% (45/45) | 100% (47/47) | 100% (42/42) | 90%+ | ✅ |
+| per-attempt SR | 68.6% (48/70) | 91.8% (45/49) | 100% (47/47) | 100% (42/42) | — | ⚠️ NVCF 风暴 |
+| 用户可见 SR | 100% (48/48) | 100% (45/45) | 99.4% | 99.4% | 99%+ | ✅ |
+| fallback 触发率 | 0% | 0% | 1.6% | 1.6% | <10% | ✅ |
 | 502 穿透用户侧 | 0 | 0 | 0 | 0 | 0 | ✅ |
-| R813 chain_full_retry 已加载 | ✅ True | ✅ | ✅ | ✅ | — | ✅ |
+| R813 chain_full_retry | ✅ True | ✅ | ✅ | ✅ | — | ✅ |
 | 新错误类型 | 无 | 无 | 无 | 无 | 无 | ✅ |
 
 ## R813 修复就位铁证
@@ -83,34 +77,35 @@ docker exec nv_gw python3 -c "import gateway.buffer_stream as b, inspect;
 
 - `curl localhost:40006/health` → ok, 5 keys, pexec models 含 glm5_2_nv
 - `curl localhost:4101/health` → ok, primary=glm5_2_nv
-- docker ps: nv_gw Up 2h, cc4101 Up 13h, dsv4p_nv40066 Up 18h, ms_gw Up 13h
+- docker ps: nv_gw Up 2h, cc4101 Up 13h, dsv4p_nv40066 Up 18h, ms_gw Up 13h, logs_db Up 6d
 
 ## 判稳结论
 
-链路完全稳定. 全指标优于目标:
-- per-call SR 100% (45/45), per-key tier 最终成功 100% (45/45, 4 瞬态全被 buffer 吸收),
-  用户可见 SR 100% (45/45), fallback 0%, 零 502 穿透. R813 修复仍就位.
-- 本轮 buffer 自愈样本 cdbedb94 是 R813 chain_full_retry 修复核心场景的实测验证:
-  attempt1 all_keys_exhausted → backoff 5s → attempt2 success, 用户零感知.
-**进入长期观测期, 不改码.**
+链路完全稳定。全指标优于目标:
+- per-call SR 100% (48/48), per-key tier 最终成功 100% (48/48),
+  用户可见 SR 100% (48/48), fallback 0%, 零 502 穿透.
+- 本轮亮点: NVCF RemoteDisc 风暴波及全 5 key (22 瞬态错误),
+  buffer 5key 轮转全部挽救, per-attempt SR 仅 68.6% 但 per-call SR 100%。
+  这是 buffer 机制设计目的的充分体现 — R813 chain_full_retry 保证 attempt 间 retry 正确触发.
+- dsv4f0731_nv SR=53.3% 是 hermes caller 另一条链路, 不在 cc2 优化范围。
+**进入长期观测期, 不改码。**
 
 ## SR 趋势
 
-| 轮 | 30min per-call SR | per-key tier SR | self-heal sample | fallback% | 备注 |
+| 轮 | per-call SR | per-key tier SR (最终) | per-attempt SR | self-heal | 备注 |
 |---|---|---|---|---|---|
-| R819 | 93.75% (45/48) | 100% (48/48) | 0 | 4.1% | NVCF 风暴末梢 3×502 全吸收 |
-| R820 | 98.2% (56/57) | 100% (58/58) | 0 | 1.5% | NVCF 风暴已退去 |
-| R821 | 97.9% (46/47) | 100% (48/48) | fe6917c2 (3-attempt) | 2.1% | buffer 自愈 3 attempt 递增 |
-| R822 | 100% (50/50) | 100% (53/53) | 26809003 (2-attempt) | 1.9% | buffer 自愈 2-attempt |
-| R823 | 100% (42/42) | 100% (42/42) | 2d1ccf2c (2-attempt) | 1.6% | buffer 自愈 2-attempt |
-| R824 | 100% (47/47) | 100% (47/47) | 全 1-attempt | 1.6% | buffer 全 1-attempt, 无自愈 |
-| **R825** | **100% (45/45)** | **100% (45/45)** | **cdbedb94 (2-attempt)** | **0%** | **buffer 自愈挽救 all_keys_exhausted** |
+| R821 | 97.9% (46/47) | 100% (48/48) | — | fe6917c2 (3-attempt) | buffer 3-attempt 递增 |
+| R822 | 100% (50/50) | 100% (53/53) | — | 26809003 (2-attempt) | buffer 2-attempt |
+| R823 | 100% (42/42) | 100% (42/42) | — | 2d1ccf2c (2-attempt) | buffer 2-attempt |
+| R824 | 100% (47/47) | 100% (47/47) | 100% (47/47) | 全 1-attempt | NVCF 后端健康 |
+| R825 | 100% (45/45) | 100% (45/45) | 91.8% (45/49) | cdbedb94 (2-attempt) | R813 核心场景验证 |
+| **R826** | **100% (48/48)** | **100% (48/48)** | **68.6% (48/70)** | **全 buffer 吸收** | **NVCF 风暴, 22 瞬态全挽救** |
 
 ## 下一步
 
-- R826: 继续长期观测. 关注 NVCF 风暴频率; fallback<10%; per-key tier SR 90%+;
-  WAIT-RECOVER CHAIN-FULL 已实测验证 (cdbedb94).
-- 无改进点, 不改码. R813 修复已充分验证, 进入纯观测期.
+- R827: 继续长期观测。关注 NVCF RemoteDisc 风暴频率; per-attempt SR 下降时确认 buffer 仍 100% 吸收。
+- 无改进点, 不改码。R813 修复已充分验证 (R825 cdbedb94 核心场景 + R826 22 瞬态全挽救)。
+- 若 NVCF 风暴持续加剧导致 buffer 吸收不下 (per-call SR<90%), 再考虑改进点。
 
 ## 参数快照 (nv_gw + cc4101)
 
