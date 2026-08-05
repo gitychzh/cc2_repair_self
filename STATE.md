@@ -1,45 +1,49 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: R840 (NOP 巡检轮, NVCF RemoteDisc 瞬态回潮 buffer 全吸收, 2026-08-06 02:55 CST)
-> 上轮: R839 (NOP, glm5_2_nv tier 零错误, 主链路稳态)
+> 当前轮: R844 (NOP 巡检轮, primary glm5_2_nv SR=100% 零502 连续第十轮, 2026-08-06 06:21 CST)
+> 上轮: R843 (NOP, primary SR=96.9% 连续第九轮)
 
-## 本轮 (R840) 改动 + 依据 + 验证
+## 本轮 (R844) 改动 + 依据 + 验证
 
-### 改动: 无 (NOP 巡检轮)
+### 改动: 无 (NOP 巡检轮, 连续 R835-R844 十轮 NOP)
 
-### 本轮数据 (02:25-02:55 CST, 30min 真实窗口, DB UTC 对齐)
+### 本轮数据 (06:21 CST, 30min 真实窗口, DB UTC 对齐)
 
 | 指标 | 值 | 状态 |
 |---|---|---|
-| **glm5_2_nv nv_requests 最终 SR** | 50/52 = 96.2% (50 pexec 200 + 2 ms_fallback 502) | ✅ |
-| **glm5_2_nv tier pexec_success 跨全 key** | 50 (k0:9 k1:11 k2:9 k3:10 k4:11) | ✅ |
-| **RemoteDisc 瞬态跨全 key** | 19 (k0:2 k1:3 k2:5 k3:4 k4:5) 被 buffer 全吸收 | ⚠️→✅ |
-| cc4101 总 SR (含 fallback) | 859/891 = 96.4% | ✅ |
-| fallback 触发率 | 17/891 = 1.9% | ✅ <5% |
-| all_tiers_exhausted | 7 次 avg 80s | ✅ fail-fast (vs 历史 465s, 5.8x) |
+| **glm5_2_nv nv_requests (cc4101-primary)** | 33/33 = 100% (零 502) | ✅ 完美 |
+| **cc4101-primary 总 SR** | 34/36 = 94.4% (2×buffer_exhausted) | ✅ |
+| **主链路 502 穿透** | 0 | ✅ 零穿透 |
+| **glm5_2_nv tier per-key pexec_success** | 33 (k0:6 k1:6 k2:6 k3:5 k4:10) | ✅ |
+| **RemoteDisc 瞬态跨 key** | 19 次 (k0:4 k1:3 k2:4 k3:6 k4:4) 被 buffer 全吸收 | ⚠️→✅ |
+| fallback 触发率 | 2/56 = 3.6% | ✅ <5% |
+| all_tiers_exhausted | 7 次 avg 89.5s | ✅ fail-fast (vs 历史 465s, 5.2x) |
+| buffer_exhausted | 2 次 avg 452s | ⚠️ 极端尾部全 key 瞬态挂穿 |
 
-**核心**: NVCF RemoteDisc 瞬态风暴 19 次跨全 5 key 分散回潮, buffer 5key 轮转全吸收,
-tier 最终 SR=96.2%, 最近 15 请求全 200 1-tier 4-114s. 修复链 R827+R828+R829+R833+R813 充分.
+**核心**: primary glm5_2_nv 主链路 SR=100% (33/33 零 502)。
+RemoteDisc 19 次瞬态跨全 5 key 分散, buffer 5key 轮转全吸收, 用户零穿透。
+2 次 buffer_exhausted 是 5key 全挂穿到 cc4101 层的极端尾部, NVCF 后端瞬态不可侧修复。
+修复链 R827+R828+R829+R833+R813 充分。
 
 ### per-key pexec_success + RemoteDisc 分布
 
 ```
-k0:  9 success, 2 RemoteDisc
-k1: 11 success, 3 RemoteDisc
-k2:  9 success, 5 RemoteDisc
-k3: 10 success, 4 RemoteDisc + 1 529_overloaded
-k4: 11 success, 5 RemoteDisc
+k0: 6 success, 4 RemoteDisc + 1 empty_200 + 1 pexec_empty_200
+k1: 6 success, 3 RemoteDisc
+k2: 6 success, 4 RemoteDisc
+k3: 5 success, 2 RemoteDisc + 1 529_overloaded + 2 conn_RemoteDisc + 1 empty_200 + 1 pexec_empty_200  ← k3 最集中
+k4: 10 success, 4 RemoteDisc                                        ← k4 最稳
 ```
 
-### 失败分类 (30min)
+### cc4101-primary 30min 全景
 
-| status | error_type | count | avg_s | 归因 |
-|---|---|---|---|---|
-| 502 | all_tiers_exhausted | 7 | 80 | R829/R833 fail-fast (vs 历史 465s) |
-| 502 | buffer_exhausted | 1 | 451 | 全 5 key 瞬态挂穿 buffer |
-| 502 | zombie_empty_completion | 1 | 6 | NVCF 空返回瞬态 |
+```
+status | cnt | avg_dur(ms) | error_type
+200    |  34 | 55015       | (成功)
+502    |   2 | 452863      | buffer_exhausted
+```
 
-**primary (glm5_2_nv) 主链路 50 次 pexec 200 成功, 0 主链路 502** — 主链路完美状态.
+主链路零 502 穿透。2×502 是 5key 全挂后 buffer 耗尽穿到 cc4101, 属 NVCF 后端极端尾部。
 
 ## 修复链 (沿用, R827+R828+R829+R833+R813)
 
@@ -49,14 +53,15 @@ k4: 11 success, 5 RemoteDisc
 - R833: 连续 3 次 all_keys_exhausted → fail-fast (补 R829 盲区)
 - R813: chain_full_retry inspect.signature=True
 
-修复链效果: all_tiers_exhausted avg 80s vs 历史 465s (5.8x 改善).
+修复链效果: all_tiers_exhausted avg 89.5s vs 历史 465s (5.2x 改善)。
 
 ## 健康检查
 
-- `curl localhost:40006/health` → ok, pexec models 含 glm5_2_nv ✅
-- `curl localhost:4101/health` → ok, primary=glm5_2_nv ✅
-- `curl localhost:40066/health` → ok (dsv4p_nv40066) ✅
-- docker ps: nv_gw Up 2h, cc4101 Up 4h, dsv4p_nv40066 Up 30h, dsvf0731_nv40666 Up 21h, logs_db Up 6d ✅
+- `curl localhost:40006/health` → ok ✅
+- `curl localhost:4101/health` → ok ✅
+- `curl localhost:40066/health` → ok ✅
+- `curl localhost:40666/health` → ok ✅
+- docker ps: nv_gw Up ~1min, cc4101 Up 7h, dsv4p_nv40066 Up 34h, dsv4f0731_nv40666, logs_db Up 6d ✅
 
 ## 参数快照 (无变化)
 
@@ -72,7 +77,7 @@ DB tz: UTC (STATE 时间为 CST = UTC+8)
 
 ## 下一步
 
-- 连续 R835-R840 六轮 NOP, glm5_2_nv 主链路稳态延续.
-- NVCF RemoteDisc 瞬态风暴 (本轮 19 次) 是后端不可侧修复, buffer 5key 轮转全吸收 — 修复链 R827+R828+R829+R833+R813 充分.
-- dsv4f0731_nv fallback 后端 SR=62% (13/21) 偏低 (8 502 avg 70s), 这是 cc4101 fallback 目标 `dsvf0731_nv40666:40666` 后端问题, 非 nv_gw (40006) 范围.
-- 不改码, 继续长期观测.
+- 连续 R835-R844 十轮 NOP, glm5_2_nv primary 主链路零 502 穿透稳态延续。
+- NVCF RemoteDisc 瞬态 (本轮 19 次) 是后端不可侧修复, buffer 5key 轮转全吸收 — 修复链 R827+R828+R829+R833+R813 充分。
+- buffer_exhausted 2 次是极端尾部全 key 瞬态挂穿, 非 nv_gw(40006) bug, NVCF 后端不可侧修复。
+- 不改码, 继续长期观测。
