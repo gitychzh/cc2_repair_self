@@ -1,145 +1,62 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: R826 (NOP 巡检轮 — NVCF RemoteDisc 风暴波及全 5key, buffer 自愈全吸收, 2026-08-05 14:38 CST)
-> 上轮: R825 (NOP, buffer 自愈挽救 cdbedb94, R813 修复核心场景实测验证)
+> 当前轮: R829 (全 key cooling fail-fast 部署, 2026-08-05 ~19:30 CST)
+> 上轮: R828 (nv_breaker 5consec→ms_gw fallback)
 
-## 本轮 (R826) 改动 + 依据 + 验证
+## 本轮 (R829) 改动 + 依据 + 验证
 
-### 改动: 无 (NOP 巡检轮)
+### 改动: buffer_stream.py 全 key cooling fail-fast
 
-R813 commit chain_full_retry=True 仍就位。本轮 30min 真实窗口 cc2 链路全指标优于目标。
-本轮观察: NVCF RemoteDisc 风暴波及全 5 key (22 个瞬态错误), **buffer 5key 轮转全部挽救**,
-per-attempt SR 仅 68.6% 但 per-call/per-key 最终 SR=100%, 用户零感知。
-这是 buffer 机制设计目的的充分体现 — R813 chain_full_retry 保证 attempt 间 retry 正确触发。
+**问题**: R828 后 6h 数据显示 14 个 buffer_exhausted 平均 465s, 浪费 108min。
+**根因**: buffer 固定跑 5 次 attempt + WaitQueue 180s, 即使全 key 都在 cooling 也继续无谓重试。
+**修复**: 
+1. for 循环中 `_execute_and_drain` 返回后检查 `_KeyManager.is_available()` 全 key → 全 cooling → break
+2. WaitQueue 前检查全 key 长冷却 (>30s) → 跳过 WaitQueue, 直接 ms_gw fallback
 
-### 30min 真实链路数据 (14:08-14:38 CST)
+### 优化方向变更
 
-注入数据中的 all_tiers_exhausted×6 + zombie_empty_completion×1 + dsv4f0731_nv SR=53.3%
-全部来自 hermes caller 走 dsv4f0731_nv 链路, 不在 cc2 (cc4101-primary→glm5_2_nv) 优化范围。
+**旧目标**: SR 90%+, fallback < 10%, 用户可见 SR 99%+
+**新目标**: **最大化单位时间 NV 成功请求数** (NV-only, ms fallback 不计入成功)
+  - 每小时 NV 成功请求数 (越高越好)
+  - 失败请求时间消耗比 (< 20%)
+  - 失败请求平均耗时 (< 120s, R829 后预期 < 30s)
+  - ms_fallback 触发率 (< 5%)
+  - per-call SR (参考, 非首要目标)
 
-#### nv_requests (cc4101-primary, cc2 的请求)
+### 验证
 
-| status | count | avg_dur |
-|---|---|---|
-| 200 | 48 | 34654ms (~34s) |
-
-per-call SR = 100% (48/48) ✅, 零错误
-
-#### per-key tier attempts (30min, glm5_2_nv)
-
-| key | success | 瞬态错误 |
-|---|---|---|
-| k0 | 11 | NVCFPexecRemoteDisconnected×3, empty_200×1 |
-| k1 | 5 | NVCFPexecRemoteDisconnected×6, SSLEOF×1, conn_RemoteDisc×1 |
-| k2 | 14 | NVCFPexecRemoteDisconnected×4, conn_RemoteDisc×1 |
-| k3 | 8 | NVCFPexecRemoteDisconnected×2, SSLEOF×1 |
-| k4 | 10 | NVCFPexecRemoteDisconnected×2, 529_nv_overloaded×1 |
-| 合计 | 48 | 22 瞬态 |
-
-- 总 attempts = 70 (48 success + 22 瞬态)
-- per-attempt SR = 68.6% (48/70) — NVCF 后端有 RemoteDisc 风暴
-- **per-key tier 最终成功 SR = 100% (48/48)** — 22 个错误全被 buffer 吸收, 用户零感知
-
-### 本轮观察: NVCF RemoteDisc 风暴特征
-
-22 个瞬态错误分布:
-- NVCFPexecRemoteDisconnected × 17 (主要错误, NVCF 后端主动断连)
-- pexec_SSLEOFError × 2 (k1, k3)
-- pexec_conn_RemoteDisconnected × 3 (k1, k2)
-- empty_200 × 1 (k0)
-- 529_nv_overloaded × 1 (k4)
-
-**关键: 风暴波及全 5 key, 但每个请求都通过 buffer 切到另一个 key 重试成功。**
-per-attempt 失败率 31% 但 per-call 成功率 100%。R813 chain_full_retry=True 保证 attempt 间 retry 正确触发。
+- [x] syntax OK (py_compile)
+- [x] docker compose restart nv_gw → OK
+- [x] curl /health → ok, 5 keys
+- [x] Python introspection: ALL-COOLING=True, SKIP-WAIT=True, _KeyManager=True
+- [x] E2E: curl cc4101 /v1/messages → 200 OK in 4.7s (不回归)
+- [ ] 下一窗口日志确认 NV-BUFFER-ALL-COOLING 或 NV-BUFFER-SKIP-WAIT 触发 (待观察)
 
 ## 指标对比
 
-| 指标 | R826 | R825 | R824 | R823 | 目标 | 状态 |
-|---|---|---|---|---|---|---|
-| per-call SR | 100% (48/48) | 100% (45/45) | 100% (47/47) | 100% (42/42) | 90%+ | ✅ |
-| per-key tier SR (最终成功) | 100% (48/48) | 100% (45/45) | 100% (47/47) | 100% (42/42) | 90%+ | ✅ |
-| per-attempt SR | 68.6% (48/70) | 91.8% (45/49) | 100% (47/47) | 100% (42/42) | — | ⚠️ NVCF 风暴 |
-| 用户可见 SR | 100% (48/48) | 100% (45/45) | 99.4% | 99.4% | 99%+ | ✅ |
-| fallback 触发率 | 0% | 0% | 1.6% | 1.6% | <10% | ✅ |
-| 502 穿透用户侧 | 0 | 0 | 0 | 0 | 0 | ✅ |
-| R813 chain_full_retry | ✅ True | ✅ | ✅ | ✅ | — | ✅ |
-| 新错误类型 | 无 | 无 | 无 | 无 | 无 | ✅ |
-
-## R813 修复就位铁证
-
-```
-docker exec nv_gw python3 -c "import gateway.buffer_stream as b, inspect;
-  print('chain_full_retry:', 'chain_full_retry' in inspect.getsource(b.BufferStreamSession.run))"
-→ chain_full_retry: True
-```
+| 指标 | R829 目标 | R828 实测 | 状态 |
+|---|---|---|---|
+| NV 成功请求数/h | 越高越好 | ~20-30/h | 待验证 |
+| 失败请求 avg 耗时 | < 30s | 465s | 待验证 |
+| 失败请求时间消耗比 | < 20% | > 50% | 待验证 |
+| ms_fallback 触发率 | < 5% | ~1.3% | ✅ |
+| per-call SR | 90%+ (参考) | 92.2% | ✅ |
 
 ## 健康检查
 
 - `curl localhost:40006/health` → ok, 5 keys, pexec models 含 glm5_2_nv
 - `curl localhost:4101/health` → ok, primary=glm5_2_nv
-- docker ps: nv_gw Up 2h, cc4101 Up 13h, dsv4p_nv40066 Up 18h, ms_gw Up 13h, logs_db Up 6d
+- docker ps: nv_gw Up, cc4101 Up, dsv4p_nv40066 Up
 
-## 判稳结论
+## 参数快照
 
-链路完全稳定。全指标优于目标:
-- per-call SR 100% (48/48), per-key tier 最终成功 100% (48/48),
-  用户可见 SR 100% (48/48), fallback 0%, 零 502 穿透.
-- 本轮亮点: NVCF RemoteDisc 风暴波及全 5 key (22 瞬态错误),
-  buffer 5key 轮转全部挽救, per-attempt SR 仅 68.6% 但 per-call SR 100%。
-  这是 buffer 机制设计目的的充分体现 — R813 chain_full_retry 保证 attempt 间 retry 正确触发.
-- dsv4f0731_nv SR=53.3% 是 hermes caller 另一条链路, 不在 cc2 优化范围。
-**进入长期观测期, 不改码。**
-
-## SR 趋势
-
-| 轮 | per-call SR | per-key tier SR (最终) | per-attempt SR | self-heal | 备注 |
-|---|---|---|---|---|---|
-| R821 | 97.9% (46/47) | 100% (48/48) | — | fe6917c2 (3-attempt) | buffer 3-attempt 递增 |
-| R822 | 100% (50/50) | 100% (53/53) | — | 26809003 (2-attempt) | buffer 2-attempt |
-| R823 | 100% (42/42) | 100% (42/42) | — | 2d1ccf2c (2-attempt) | buffer 2-attempt |
-| R824 | 100% (47/47) | 100% (47/47) | 100% (47/47) | 全 1-attempt | NVCF 后端健康 |
-| R825 | 100% (45/45) | 100% (45/45) | 91.8% (45/49) | cdbedb94 (2-attempt) | R813 核心场景验证 |
-| **R826** | **100% (48/48)** | **100% (48/48)** | **68.6% (48/70)** | **全 buffer 吸收** | **NVCF 风暴, 22 瞬态全挽救** |
+无新增参数。R828 的 breaker + R829 的 fail-fast 使用 KeyManager 现有 API。
+全 cooling 判定: `KeyManager.is_available(model, k)` 全 false → break
+WaitQueue 跳过: `KeyManager.get_state(model, k)["cooldown_remaining_s"]` 全 > 30s → skip
 
 ## 下一步
 
-- R827: 继续长期观测。关注 NVCF RemoteDisc 风暴频率; per-attempt SR 下降时确认 buffer 仍 100% 吸收。
-- 无改进点, 不改码。R813 修复已充分验证 (R825 cdbedb94 核心场景 + R826 22 瞬态全挽救)。
-- 若 NVCF 风暴持续加剧导致 buffer 吸收不下 (per-call SR<90%), 再考虑改进点。
-
-## 参数快照 (nv_gw + cc4101)
-
-### nv_gw (40006)
-- NVU_FORCE_STREAM_UPGRADE = 0
-- NVU_PEER_FB_SKIP_MODELS = glm5_2_nv,dsv4p_nv
-- MIN_OUTBOUND_INTERVAL_S = 10
-- KEY_COOLDOWN_S = 30
-- NVU_CALLER_KEY_MAP = hermes:2;openclaw:3;opencode:4
-- TIER_TIMEOUT_BUDGET_S = 180
-- NVU_DISABLE_MS_FALLBACK = 1
-- TIER_COOLDOWN_S = 180
-- UPSTREAM_TIMEOUT = 90
-- NVU_BUFFER_CALLERS = cc4101-primary,openclaw2
-- NVU_BUFFER_TIMEOUT_STAIRS = 90,90,90,90,90
-- NVU_BUFFER_TOTAL_DEADLINE_S = 450
-- NVU_BUFFER_MAX_RETRIES = 5
-- KEY_FID_BIND = 0:0;1:0;2:0;3:0;4:0 (全 bind b1b22d03)
-- KEY_PROXY_BIND = k0→7894 k1→7897 k2→7896 k3→7899 k4→7901 (实测)
-
-### cc4101
-- PRIMARY_UPSTREAM_URL = http://nv_gw:40006/v1/messages
-- PRIMARY_UPSTREAM_MODEL = glm5_2_nv
-- FALLBACK_UPSTREAM_URL = http://ms_gw:40007/v1/messages (历史残留, SR 99%+ 极少触发)
-- FALLBACK_UPSTREAM_MODEL = glm5_2_ms
-- CC4101_STREAM_TOTAL_DEADLINE_S = 470
-- PRIMARY_HEADER_TIMEOUT = 400
-- CC4101_PRIMARY_FAIL_THRESHOLD = 3
-- CC4101_PRIMARY_SKIP_S = 30
-
-### deadline 链
-- 90s/buffer-attempt × 5 = 450s buffer < 470s cc4101 < 600s API < 900s idle
-
-## Function IDs (NVCF glm-5.2)
-- b1b22d03 ✅ ACTIVE 首选 (当前全 5key bind, 实测 200 OK)
-- b6029a96 ✅ ACTIVE 备用 (200K 同限, b1b22d03 持续出错时改 pos1)
-- 3b9748d8 ⚠️ broken (持续 RemoteProtocolError, 不 bind)
+- 观察 R829 在下次 NVCF 风暴时的表现
+- 确认 NV-BUFFER-ALL-COOLING / NV-BUFFER-SKIP-WAIT 日志出现
+- 确认失败请求 avg 耗时降到 < 30s
+- 若效果好, 继续关注: 能否进一步缩短成功请求的 avg 耗时 (当前 45s)

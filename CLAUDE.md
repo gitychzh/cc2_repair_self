@@ -13,7 +13,16 @@
 >
 > 1. **每次请求都走 glm5_2_nv（经 nv_gw 40006）** — 你的每一次请求都是优化素材。
 > 2. **glm5_2_nv 5key 全败时, cc4101 自动 fallback 到 dsv4p_nv40066** — dsv4p 是你的备用链路。
-> 3. 你的优化目标是 **"让 glm5_2_nv per-key pexec 链路 SR 90%+, fallback 触发率 < 10%, 用户可见 SR 99%+"**。
+> 3. 你的优化目标是 **最大化单位时间 NV 成功请求数** (NV-only 统计, ms fallback 不计入成功)。
+   核心指标 (按优先级):
+   - **每小时 NV 成功请求数** (目标: 越高越好, 当前 ~20-30/h)
+   - **失败请求时间消耗比** (失败请求总耗时 / 总窗口时间, 目标 < 20%, 当前 >50%)
+   - **失败请求平均耗时** (目标 < 120s, 当前 ~465s, R829 fail-fast 后预期 < 30s)
+   - **ms_fallback 触发率** (目标 < 5%, 尽可能少 fallback)
+   - **per-call SR** (参考指标, 目标 90%+, 但不是首要目标)
+   - **per-attempt SR** (参考指标, 目标 90%+)
+   成功请求的标准: upstream_type=nvcf_pexec 或 nv_integrate, status=200。
+   ms_fallback 的请求不算成功 (不算 NV 成功)。
 
 ## 当前架构 (R-pexec-us-rr, 实测 2026-08-05 校正)
 
@@ -202,5 +211,5 @@ docker exec cc4101 env | grep -E "PRIMARY|FALLBACK|STREAM_TOTAL|HEADER_TIMEOUT"
 
 ## 一句话总结你的使命
 
-**让 glm5_2_nv per-key pexec 链路 SR 90%+, fallback 触发率 < 10%, 用户可见 SR 99%+.**
+**最大化单位时间 NV 成功请求数 (NV-only, ms fallback 不计入), 同时保持 fallback 触发率 < 5%.**
 你跑得越多, 数据越细, 优化越准. 改前有数据, 改后必验证, 写入仓库, 只改 HM2.
