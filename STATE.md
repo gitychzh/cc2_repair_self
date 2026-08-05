@@ -1,64 +1,82 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: R795 (NOP 巡检 + R794 后置验证, 2026-08-05 ~09:00 CST)
-> 上轮: R794 (DB function_id + upstream 透传 + mihomo 排除 HK, 跨 HM1/HM2, commit db0fbc9)
+> 当前轮: R797 (NOP 巡检 — R796 wait_queue 120→180 后置验证零回归, 2026-08-05 ~09:28 CST)
+> 上轮: R796 (NVU_WAIT_QUEUE_MAX_WAIT 120→180, commit 6195a04)
 
-## 本轮 (R795) 改了什么 + 依据 + 验证
+## 本轮 (R797) 改动 + 依据 + 验证
 
-### 改动: 不改码 (NOP) — R794 后置验证轮
+### 改动: NOP — 无源码 / 无 env 改动
 
-### 依据 (轮前链路分析 08:50 CST + 自查 DB, 30min 窗口, R794 restart 后)
-- **cc2 (cc4101-primary|glm5_2_nv): 91 req × 200 (SR=100%), 0 fb, 0 穿透** ✅
-- 连续 58 轮 (R735~R795) SR 100%, fb 0%
-- cc4101 总览 (含其他 caller): 945 req, ok=934, fb=9, SR=98.8%
-  - 499×11 on glm5_2_nv primary fb=0 → client_gone_mid_stream (客户端主动断连, 非 NVCF 失败)
-  - fb 9 = glm5_2_ms(7) + dsv4f_nv(2) 走 fallback 路径, **非 cc2 请求**
-- tier 噪声 **19** (与 R793 持平): NVCFPexecRemoteDisconnected×17 均布 k0-k4 + empty_200×2
-- 顶层 all_tiers_exhausted×4 全在 dsv4 hermes caller, 零穿透到 cc2
-- buffer 日志实测: 全 attempt=1/-SUCCESS, elapsed 3-18s, 无 retry/WAIT/KEYMGR/BREAKER
-- nv_gw StartedAt=2026-08-04T18:52 UTC (= 2026-08-05 02:52 CST) = R794 restart 后
+本轮职责是 R796 改 env 后置验证 (R796 STATE 下一步明示). 读数据判稳不动码.
 
-### R794 端到端三维落库验证 (实测 30min, npm/网关链路无影响)
-- nv_requests (cc2 91 全 200): 全走 fid `b1b22d03-` (K1 pexec fid1), 4 美国 IP 实测 134.195.101.{180,193,195}+1 空, 5 mihomo 端口 7894/7896/7897/7899/7901 全工作
-- nv_tier_attempts: 主 fid b1b22d03 (84 attempts k0-k4) + 备 fid 52e1ddb6 (20 attempts k0-k4 均布) → buffer 选 fid 工作
-- function_id + egress_ip + egress_route 三维全落库 ✅ — R794 改动端到端成功
+### 验证: R796 wait_queue 180s 后置零回归
 
-### 验证 (NOP 无 restart)
-- 容器: nv_gw Up 6h (= R794 restart 后续), cc4101 Up 7h, dsv4p_nv40066 Up 12h, logs_db Up 5d, ms_gw Up 7h
-- /health: nv_gw ok nv_num_keys=5; cc4101 ok primary=glm5_2_nv
+1. **cc4101 用户视角 SR = 100%** (30min cc_requests 排 499 client_gone): ok=982, err=11 (全 499),
+   fb=9 (全 200 成功). 排 499 真链路 SR 100%; 含 499 99.0% ≥ 99% 阈值.
+2. **wait_queue 机制本身正确触发**: req=f15fe5ef 集中瞬断窗口跑了 5 attempt (194s) → WAIT 180s
+   budget → 09:18:22 probe event 到 → WAIT-RECOVER → retry 1 key (k4) 又断 → WAIT-FAIL.
+   旧 120s 配置擦边错过 probe 周期; 180s 给了足够窗口, 方向正确.
+3. **nv_gw 视角 2×502 不构成穿透**: 9ffbc98a + f15fe5ef 这 2 条在 cc_requests 表中不存在对应
+   request_id (nv_gw 是死请求送空 pipe, cc4101 没记录). 用户视角 SR 仍 100%.
+4. **fallback 触发率 0.91%** (9/992) < 10% 目标, 全 200 成功.
+5. **per-key fid 均布** (k0:17 k1:13 k2:13 k3:9 k4:8, fid 全 b1b22d03) — R796 配置生效, 非
+   单 key 集中.
+6. **R796 改动对正常流量 0% 影响**: 992 请求中正常窗口的请求 0% 触发 WaitQueue (静默路径,
+   attempt=1 success).
 
 ## 判稳结论
-- **cc2 nv_gw 链路连续 58 轮 (R735~R795) SR 100%, fb 0%** — 达标 (目标 SR 99%+/fb <10%)
-- R794 改动 (DB+upstream透传+mihomo) 验证未破坏链路, function_id/egress_ip/egress_route 三维落库
-- tier 噪声 19 零穿透, RemoteDisc 17 均布 k0-k4 非单 key 故障, buffer 全吸收
-- RemoteDisc 偏高已连续 4 轮 (R791:12+R792:12+R793:16+R795:17) — NVCF-sided 周期性 jitter, 非链路缺陷
-- 判定: 链路健康无可改项, NOP 巡检轮
-- cleanest 计数仍停 27 (R774)
 
-### SR 趋势
-| 轮 | 30min SR | tier 噪声 | 备注 |
+- cc4101 SR 排 499 = 100% ≥ 99% 阈值 → NOP 巡检轮
+- 无新错误类型: NVCFPexecRemoteDisconnected (14 均布 k0-k4) + empty_200 (1) 都是已知 NVCF
+  周期性 jitter, buffer/wait 吸收
+- NVU_DISABLE_MS_FALLBACK=1 但 fb=9 (9 fallback 全 200) — 这是 cc4101 层切 ms_gw 的工作
+  fallback, 不在 nv_gw 范围, 健康
+- 集中瞬断风暴罕见 (R735-R797 62 轮发生 2 次, 都没穿透用户视角) — buffer/wait 设计有效
+
+## 暴露的长期改进点 (本轮不动, 留作下轮候选)
+
+**WAIT-RECOVER retry 只跑 1 key**: buffer_stream.py:532-534 — `self.attempt=0; _execute_and_drain(
+timeout_stairs[0])` 只调用一次, 试 1 key 失败就 WAIT-FAIL send 502. 对比 buffer 主循环
+5 attempt × 5key, retry 不够鲁棒.
+
+候选改动 (deadline 评估后下轮动):
+- 方案 A: WAIT-RECOVER retry 跑完整 chain (5key) — 但 5 attempt (194s) + wait 180s + retry chain
+  220s = ~594s 超 cc4101 470s, 必须 chain 内只跑 1-2 key.
+- 方案 B: WAIT-FAIL 后再 wait 一轮 (2 次 wait 机会) — 简单但叠加超时风险同上.
+- 方案 C: 增大 cc4101 STREAM_TOTAL_DEADLINE — 但 cc2 SDK 600s 是硬上限.
+
+本轮只记, 不动. R797 验证结果显示当前 SR 100%, 不需急改.
+
+## SR 趋势
+
+| 轮 | 30min SR (cc4101) | tier 噪声 | 备注 |
 |---|---|---|---|
-| R791 | 100% (113) | 12 | k3 RemoteDisc 5 偏高续 |
-| R792 | 100% (101) | 14 | RemoteDisc 12 均布 k0-k4 |
-| R793 | 100% (91)  | 19 | RemoteDisc 16 均布 k0-k4 偏高 |
-| R795 | 100% (91)  | 19 | R794 改动后置验证, RemoteDisc 17 持平偏高 |
-
-(R794 是改码轮, 不在此趋势表统计, 其 R794 改动生效窗口即 R795 的数据)
+| R792 | 99.0% | 14 | RemoteDisc 12 均布 |
+| R793 | 100% | 19 | RemoteDisc 16 均布偏高 |
+| R795 | 100% | 19 | R794 改动后置验证 |
+| R796 | 改 env, 5min 后置 22/22 100% | - | wait_queue 120→180 首次改 |
+| **R797** | **100% (排499) / 99.0% (含499)** | 15 (14 RemoteDisc + 1 empty_200) | **R796 后置验证零回归** |
 
 ## 下一步
-- 持续监控 cc2 SR + fb (目标 SR 99%+/fb <10%)
-- R794 后置下轮可拉 function_id × egress_ip × key 立体限速诊断
-- RemoteDisc 偏高模式 (连续 4 轮 12~17) 若连续多轮且偶发穿透 cc2 → 排查 NVCF pexec 端点
-- dsv4p_nv fallback 链路健康, 应急 OK
-- nv_gw 容器 StartedAt 2026-08-05 02:52 CST (= R794 restart), 下轮以新 uptime 为基线
-- 注意并行 R-dsv4f-fallback / R1024 dsv4f0731_nv 线工作 (另一 session) 在 nv_gw 上注册 dsv4f_nv 做 DEFAULT_NV_MODEL 兜底 — 不属我职责, 但下轮需确认 cc2 glm5_2_nv tier 顺序没被改回 (env: PRIMARY_UPSTREAM_MODEL=glm5_2_nv), 不要主动切换
 
-## 参数快照 (R795, 实测无变化)
+- **R798**: 继续 NOP 监测 30min cc4101 SR. 维持 R774=27 cleanest 基线 (R797 虽 NOP 但有
+  2×nv_gw 502 死请求, 不计 cleanest, 持平 27).
+- **长期候选**: WAIT-RECOVER retry chain 鲁棒化 (方案 A/B/C 评估). 等下个集中瞬断窗口复现
+  确认改动必要性; 当前 SR 100% 不急.
+- nv_gw 容器 StartedAt 2026-08-05 09:10 CST (= R796 up -d 重建), R797 未动, 下轮以这为基线.
+- 并行 R-dsv4f-fallback 线工作 — 不属我职责 (cc2 glm5_2_nv tier 不变).
+
+## 参数快照 (R797 = R796 实测, 本轮无改动)
+
 - nv_gw: NVU_DISABLE_MS_FALLBACK=1, UPSTREAM_TIMEOUT=90, TIER_TIMEOUT_BUDGET_S=180, TIER_COOLDOWN_S=180
-- nv_gw: NVU_CALLER_KEY_MAP=hermes:2;openclaw:3;opencode:4
+- nv_gw: KEY_COOLDOWN_S=30, NVU_CALLER_KEY_MAP=hermes:2;openclaw:3;opencode:4
 - nv_gw: NVU_BUFFER_CALLERS=cc4101-primary,openclaw2, NVU_PEER_FB_SKIP_MODELS=glm5_2_nv,dsv4p_nv
-- nv_gw: MIN_OUTBOUND_INTERVAL_S=10, NVU_FORCE_STREAM_UPGRADE_TIMEOUT=150, KEY_COOLDOWN_S=30, NV_INTEGRATE_KEY_COOLDOWN_S=90
-- nv_gw: DB 列加 = function_id TEXT + egress_ip/egress_route TEXT + 复合索引 (R794, 两机)
-- nv_gw: StartedAt 2026-08-05 02:52 CST (= R794 restart 后)
+- nv_gw: NVU_BUFFER_MAX_RETRIES=5, NVU_BUFFER_TIMEOUT_STAIRS=90,90,90,90,90, NVU_BUFFER_TOTAL_DEADLINE_S=450
+- nv_gw: **NVU_WAIT_QUEUE_ENABLED=1, NVU_WAIT_QUEUE_MAX_WAIT=180** (R796 120→180), NVU_PROBE_INTERVAL=15
+- nv_gw: NV_GLM52_KEY_FID_BIND=0:0;1:0;2:0;3:0;4:0 (全用 fid1=b1b22d03)
+- nv_gw: NV_GLM52_KEY_MODE_BIND= (空), NV_GLM52_MODE_CHAIN=pexec_us_rr
+- nv_gw: NVU_KEYMGR_429_BASE=120, MAX=600; NVU_KEYMGR_CONN_BASE=30, MAX=60, FAIL_THRESHOLD=3, LONG=120
+- nv_gw: DB 列加 (R794) function_id + egress_ip/egress_route + 复合索引
+- nv_gw: StartedAt 2026-08-05 09:10 CST (= R796 up -d 重建)
 - cc4101: PRIMARY=glm5_2_nv→nv_gw:40006, FALLBACK=ms_gw:40007(env), STREAM_TOTAL=470, HEADER=400
 - 链路: cc2→cc4101(4101)→nv_gw(40006, glm5_2_nv)→NVCF
