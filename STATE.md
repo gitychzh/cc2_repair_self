@@ -1,50 +1,40 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: R849 (NOP 巡检轮 — 近窗 primary SR=100%, 30-min 残留均风暴旧痕, 不改码, 2026-08-07 04:30 CST)
-> 上轮: R848 (glm5_2_nv 风暴全退, primary=dsv4f0731_nv 一次成功, 不改码)
+> 当前轮: R851 (NOP 巡检轮 — 近窗 cc4101-primary SR=100% 57×200 零错误, 30-min 残留均风暴旧痕, 不改码, 2026-08-07 04:22 CST)
+> 上轮: R850 (NOP — 近窗 34×200 零错误, 不改码)
 
-## 本轮 (R849) 改动 + 依据 + 验证
+## 本轮 (R851) 改动 + 依据 + 验证
 
 ### 改动: 无 (巡检轮 — 近窗全净, 修复链自适应吸收 30-min 旧痕)
 
 ### 本轮数据 (04:22 CST, 实时拉取, DB UTC 对齐)
 
-**最近 10min cc4101-primary (cc2 自己路径) SR = 100% (37×200, 零错误).** nv_gw buffer 全走
-dsv4f0731_nv, 每条 attempt=1/5 一次成功, 9-12s, success_tool_call, 零 buffer_exhausted 零 WAIT.
-30min 窗口的 `buffer_exhausted×9`/`all_tiers_failed×5`/dsv4f0731_nv fid 52e1ddb6 RemoteDisc×9
-全为窗口早期 glm5_2_nv 风暴旧痕, 已被多 key round-robin + fail-fast 自适应吸收.
+**最近 15min cc4101-primary (cc2 自己路径) SR = 100% (57×200, 零错误).** nv_gw buffer 全走
+dsv4f0731_nv, 每条 attempt=1/5 一次成功, 1-12s, success_tool_call/success_text, 零 buffer_exhausted
+零 WAIT. 30min 窗口的 `buffer_exhausted×4`/`client_gone_pre_attempt×2`/glm5_2_nv 502×2
+全为窗口早期 glm5_2_nv 风暴旧痕, 已被多 tier round-robin + fail-fast 自适应吸收.
 
 | 指标 | 值 | 状态 |
 |---|---|---|
-| **最近 10min cc4101-primary SR** | **100% (37×200, 零错误)** | ✅ |
+| **最近 15min cc4101-primary SR** | **100% (57×200, 零错误)** | ✅ |
 | **primary 目标 tier** | **dsv4f0731_nv** (自适应轮转持有) | ✅ |
-| **buffer 日志 (15min)** | 每条 attempt=1/5 一次成功, 9-12s, success_tool_call | ✅ 零 buffer_exhausted |
-| **fallback (ms_gw 层)** | 近窗 0 次; cc4101-primary nv 路径全净 | ✅ |
+| **buffer 日志 (近 20min)** | 每条 attempt=1/5 一次成功, 1-12s, success_tool_call/success_text | ✅ 零 buffer_exhausted |
+| **fallback (ms_gw 层)** | 近窗 0 次 | ✅ |
 
 ### 30min 硬窗口残留 (缓解释义)
 
-`glm5_2_nv|502×6`, `buffer_exhausted×9 (avg 217s)`, `all_tiers_failed×5` 全为窗口早期风暴
-残留, 最近 10min 已全净 (37/37 ok), 与 R844-R848 同型.
-
-### dsv4f0731_nv 双 fid 现象 (值得记录, 非回归)
-
-近窗 nv_tier_attempts 显示 dsv4f0731_nv 走两 fid:
-- **281478d0 → pexec_success × 37** (成功那次)
-- **52e1ddb6 → RemoteDisc×9 / 529×2 / budget_exhausted×1** (轮转中该 key 失败 attempt)
-
-这是 round-robin 设计意图: 单 key-fid 瞬态失败被其余 key 成功吸收, 请求最终 200. 无死锁不改码.
+`buffer_exhausted×4 (avg 199s)`, `client_gone_pre_attempt×2`, glm5_2_nv 502×2 全为窗口早期
+glm5_2_nv 风暴残留, 最近 20min 逐分钟全 200 (57/57), 与 R844-R850 同型.
+glm5_2_nv 仍处退化, cc4101 自适应轮转 pinned dsv4f0731_nv — 修复链设计意图.
 
 ## 修复链 (沿用, R827+R828+R829+R833+R813)
-1. glm5_2_nv 全 key 疲劳 → R829/R833 fail-fast (178s avg vs 历史 465s)
-2. cc4101 动态 primary glm5_2_nv → dsv4f0731_nv (健康 tier 接管)
-3. dsv4f0731_nv 9-12s 一次成功, 用户无感知
+1. glm5_2_nv 全 key 疲劳 → R829/R833 fail-fast + cc4101 动态 primary → dsv4f0731_nv
+2. dsv4f0731_nv 1-12s 一次成功, 用户无感知
+3. 多 tier round-robin (dsv4p/dsv4f/glm5_2_nv) 自适应吸收底层跨 key 瞬态失败
 
 ## 健康检查
 - `curl localhost:4101/health` → ok ✅ (cc4101, primary=dsv4f0731_nv)
-- `curl localhost:40006/health` → ok ✅ (nv_gw, 5 keys, 含 dsv4f0731_nv/glm5_2_nv)
-- `curl localhost:40066/health` → ok ✅ (dsv4p_nv40066)
-- `curl localhost:40666/health` → ok ✅ (dsvf0731_nv40666)
-- docker ps: nv_gw Up 42min, cc4101 Up 16min, dsv4p_nv40066 Up 2d, dsvf0731_nv40666 Up 11h — 全 Up ✅
+- `curl localhost:40006/health` → ok ✅ (nv_gw, passthrough, 5 keys, nvcf_pexec_models 含 dsv4p_nv/dsv4f_nv/dsv4f0731_nv/glm5_2_nv/kimi_nv)
 
 ## 参数快照 (无变化)
 
@@ -60,5 +50,5 @@ DB tz: UTC (STATE 时间为 CST = UTC+8)
 
 ## 下一步
 - 长期观测。glm5_2_nv 冷却退去后观察 cc4101 primary 是否自动回归 glm5_2_nv (主链路目标)。
-- 关注 dsv4f0731_nv fid 52e1ddb6 持续失败; 若长期疲劳而 281478d0 稳定, 可评估后续调 key-fid, 当前轮转已吸收无需动。
+- 关注 glm5_2_nv 持续疲劳; 当前 dsv4f0731_nv 全量接管已吸收, 无需动。
 - 不改码。修复链充分, 近窗全净。
