@@ -1,47 +1,47 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: **R1076 (NOP 巡检轮/不改码 — cc2 主链 109/109=100% SR, 0 bad; fallback 0; 主链错误分类为空; 连续多轮达完全健康基线)**
-> cc4101-primary (主 nv_gw:40006) 实测 30min = **109/109 = 100% SR, 0 bad**;
-> dsv4f0731_nv 整体 SR=99.4% (171/172) — 1×zombie_empty_completion 属 hermes 越界宿主 40666, 非主链;
-> 30min cc_requests (110 条) = fallback 0 次 / 0.0%, 全走主链;
-> 错误分类: 主链为空 (无 zombie, 无 502, 无 timeout);
-> per-key: 全 5 key pexec_success, key1 一次 NVCFPexecRemoteDisconnected 但随行 19 次 success (常态单键抖动);
-> buffer 日志: 全 attempt=1 即 success (3-9s, input 66-68K tokens, tool_calls 正常), 无 fail/WAIT/KEYMGR;
-> 容器 (/health 复核): nv_gw Up 21h, cc4101 Up 16h, /health 40006/40066/4101 全 200
-> 上轮: R1075 (NOP, 主链 107/107=100%)
+> 当前轮: **R1077 (NOP 巡检轮/不改码 — cc2 主链 102/103=99.0%, 1 bad transient; fallback 0; 1 bad 已根因定位为 SSLEOFError egress 瞬时抖动, 20:20:32 后全恢复 102×200 clean)**
+> cc4101-primary (主 nv_gw:40006) 实测 30min = **102/103 = 99.0% SR, 1 bad (buffer_exhausted 502, avg_dur 62796ms)**;
+> 该 1 bad 根因 = transient **SSLEOFError `UNEXPECTED_EOF_WHILE_READING`** 多 key 同发 (k5→k1→k2, e-IP 7899/7901/7894),
+> AKE fail-fast 正确触发 (省 180s WaitQueue), ms_gw fallback 也未接管 (time-locked 同窗口) → 报 502 给 CC;
+> **20:20:32 后 nv_gw 无 SSLEOFError, 后续全 attempt=1 success (flushed 1-16s)** — 已自愈, 非配置漂移;
+> fallback 0 次 / 0.0%; per-key 0/2/3/4 pexec_success, key1 18+1 RemoteDisconnected 后恢复;
+> 容器 (/health 复核): nv_gw Up 17h, cc4101 Up 16h, 40006/4101/40007 全 200
+> 上轮: R1076 (NOP, 主链 109/109=100%)
 
-## 本轮 (R1076) 改动 + 依据 + 验证
+## 本轮 (R1077) 改动 + 依据 + 验证
 
-### 改动: 无 (NOP。cc2 主链 109/109=100% 0 bad, 主链错误分类为空, 无参数可调; 唯一 1×zombie 为 hermes 越界宿主 40666, 非 cc2 范围)
+### 改动: 无 (NOP。1 bad 为 transient SSLEOFError egress 抖动, 故障在上游 egress/远端, 超出 nv_gw 参数调整范围, 已自愈 20:20:32 后全 clean; 无配置漂移)
 
-### 依据 (注入轮前链路分析 20:17 CST + 独立 DB 复核 + 容器 /health 复核 2026-08-07)
+### 依据 (注入轮前链路分析 20:22 CST + nv_gw 90min 日志根因复核 + 容器 /health 复核 2026-08-07)
 
-- **30min cc4101-primary (主 nv_gw:40006) = 109/109 = 100% SR, 0 bad** (独立 psql 复核: nv_requests caller=cc4101-primary = 200|109, 0 error)。
-- dsv4f0731_nv 整体 SR=99.4% (171/172) — 1 个 502 zombie_empty_completion (avg_dur 5428ms) 属 hermes 越界宿主 (非主链)。
-- **主链错误分类为空** — 无 zombie, 无 502, 无 timeout。
-- 30min cc_requests (110 条) = sr 100.0%, fallback 0 次 / 0.0%, 全走主链。
-- per-key: 0/1/2/3/4 全 pexec_success (24/19+1/22/20/21), key1 一次 NVCFPexecRemoteDisconnected 后 19 次 success (常态单键抖动)。
-- buffer 日志: 全 attempt=1 即 success_tool_call (3-9s, input 66-68K tokens), 无 fail/WAIT/KEYMGR。
-- /health 实测: 40006/40066/4101 全 200; 容器 nv_gw Up 21h, cc4101 Up 16h.
+- **30min cc4101-primary (主 nv_gw:40006) = 102/103 = 99.0% SR, 1 bad** (buffer_exhausted 502, avg_dur 62796ms)。
+- dsv4f0731_nv 整体 SR=99.4% (162/163); 错误分类 buffer_exhausted×1 + zombie_empty_completion×1 (参考)。
+- **根因复核 (nv_gw 90min 日志)**: 2 个同签名 transient buffer_exhausted (`ec39dd9b`@19:01, `c107bc7e`@20:19),
+  均为 SSLEOFError `UNEXPECTED_EOF_WHILE_READING` 依次命中 k5→k1→k2; 3 次 consecutive all_keys_exhausted
+  触发 **AKE fail-fast** (省 WaitQueue 180s) → ms_gw fallback 也未能接管 (time-locked 同瞬时窗口) → 报错给 CC。
+- **20:20:32 后 nv_gw 无 SSLEOFError**, 后续全部 attempt=1 success (flushed 1-16s, input 60-69K tokens), 已自愈。
+- 30min fallback 0 次 (0.0%); per-key 0/2/3/4 pexec_success, key1 18 success + 1 NVCFPexecRemoteDisconnected (常态单键抖动)。
+- /health 实测: 40006 nv_gw 200, 4101 cc4101 200, 40007 ms_gw 200; 容器 nv_gw Up 17h, cc4101 Up 16h.
 
 ### 本轮数据
 
 | 指标 | 值 | 状态 |
 |---|---|---|
-| 主 nv_gw(40006) cc4101-primary | **109/109 = 100% SR, 0 bad** | ✅ |
-| dsv4f0731_nv 整体 | 171/172 = 99.4% (1×zombie 作参考) | ✅ |
-| 30min cc_requests | 110 条, fallback 0 次 (0.0%), 全走主链 | ✅ |
-| psql 复核 | nv_requests caller=cc4101-primary = 200\|109 (0 error) | ✅ |
-| per-key | 全 5 key pexec_success; key1 一次 RemoteDisconnected 后恢复 | ✅ |
-| buffer 日志 | 全 attempt=1 success (3-9s), 无 fail/WAIT/KEYMGR | ✅ |
-| 容器 | nv_gw Up 21h, cc4101 Up 16h; /health 40006/40066/4101 全 200 | ✅ |
+| 主 nv_gw(40006) cc4101-primary | **102/103 = 99.0% SR, 1 bad** (buffer_exhausted) | ⚠️ root-caused transient |
+| 30min fallback | 0 次 (0.0%), 全走主链 | ✅ |
+| dsv4f0731_nv 整体 | 162/163 = 99.4% (zombie 作参考) | ✅ |
+| 错误分类 | buffer_exhausted×1 (root-cause=SSLEOFError egress 抖动) | ✅ 已自愈 |
+| per-key | 0/2/3/4 pexec_success; key1 18+1 RemoteDisconnected 后恢复 | ✅ |
+| buffer 日志 | 20:20:32 后全 attempt=1 success, 无死锁 | ✅ |
+| 容器 /health | 40006/4101/40007 全 200; nv_gw Up 17h, cc4101 Up 16h | ✅ |
 
 ## 下一步
-- 保持 NOP 观察。主链连续多轮 0 bad 已抵达"完全健康基线"。
-- 仅当 cc2 主链自身出现 bad 或 fallback > 约 10% 才行动; 本轮 1×zombie 为 hermes 越界宿主 (非主链), 不计入 cc2 范围。
-- 单 key 连续多轮 100% 失败才考虑 KEY_FID_BIND 换 fid; 当前主链 fid 全 pexec_success, 无此需。
+- 保持 NOP 观察。本轮 1 bad 为 transient SSLEOFError egress 抖动 (故障在上游), 已自愈, 非配置漂移, 无参数可调。
+- 仅当 SSLEOFError 复现且呈**持续分布** (非单次离散抖动) 才查 egress IP / mihomo 代理线路健康 (7900-7904), 属宿主链路问题。
+- 单 key 连续多轮 100% 失败才考虑 KEY_FID_BIND 换 fid; 当前 key1 单次抖动后恢复, 无需动作。
 
-## 参数快照 (2026-08-07, 与上轮 R1075 一致, 未动)
+## 参数快照 (未动, 与上轮 R1076 一致)
 - cc4101: PRIMARY_UPSTREAM_URL=http://nv_gw:40006/v1/messages, PRIMARY_UPSTREAM_MODEL=dsv4f0731_nv,
   FALLBACK_UPSTREAM_URL=http://ms_gw:40007/v1/chat/completions, FALLBACK_UPSTREAM_MODEL=glm5_2_ms,
   CC4101_STREAM_TOTAL_DEADLINE_S=470, PRIMARY_HEADER_TIMEOUT=400, CC4101_PRIMARY_FAIL_THRESHOLD=3, CC4101_PRIMARY_SKIP_S=30,
