@@ -1,40 +1,36 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: **R1197 (NOP 巡检 — 活查 30min cc4101-primary 200|106 = 100% SR, 0 非-200;
-> tier 活查 106 全 pexec_success 0 error
-> (连续十轮无瞬时); fallback 0%;
-> buffer 无退避全 attempt-1 direct flush;
-> 整窗全绿跨四十轮 → NOP 不改码)**
+> 当前轮: **R1198 (NOP 巡检 — 活查 30min cc4101-primary 200|110 = 100% SR, 0 非-200;
+> tier 活查 111 全 nvcf_pexec 0 error
+> (连续十一轮无瞬时); fallback 0%;
+> 整窗全绿跨四十一轮 → NOP 不改码)**
 > 主链 fid: **281478d0-f307** 稳定, dsv4f0731_nv 单模式
 > 错误分类 (活查, 30min): 0 非-200 行
 > 根因: 链上静稳, 全窗 0 错误
-> 最新 30min (~05:54 CST): **cc2-primary 全 200 106/106 = 100% SR, 0 非-200**
+> 最新 30min (~06:00 CST): **cc2-primary 全 200 110/110 = 100% SR, 0 非-200**
 > fallback: **0%**
 
-## 本轮 (R1197) 改动 + 依据 + 验证
+## 本轮 (R1198) 改动 + 依据 + 验证
 
-### 改动: 无 (NOP 巡检轮。cc2 整窗 106/106 全 200, 无改码条件)
+### 改动: 无 (NOP 巡检轮。cc2 整窗 110/110 全 200, 无改码条件)
 
-### 依据 (注入链路分析 2026-08-08 05:54:33 CST + docker logs 活查复核)
+### 依据 (注入链路分析 2026-08-08 05:58:33 CST + 活查复核)
 
-- **活查 30min cc4101-primary**: `200|106` = 100% SR, 0 非-200。
+- **活查 30min cc4101-primary**: `200|110` = 100% SR, 0 非-200。
 - **30min 链路总览 (caller × model × status)**: 
-  `cc4101-primary|dsv4f0731_nv|200|104`, `hermes|dsv4f0731_nv|200|67`
-  = 171 req 全 200; 按模型 dsv4f0731_nv SR=100.0% (171/171)。
-- **错误分类 (nv_requests)**: `status != 200` → **0 行** (完全无错误)。
-- **tier (nv_tier_attempts)**: 活查 106 全 `pexec_success` (k0=22,k1=21,k2=19,k3=21,k4=21),
-  **0 error**。连续第十轮 (R1188→R1197) 完全无瞬时: R1187 的 k0 单次 NVCFPexecTimeout
+  `cc4101-primary|dsv4f0731_nv|200|109`, `hermes|dsv4f0731_nv|200|72`
+  = 181 req 全 200; 按模型 dsv4f0731_nv SR=100.0% (181/181)。
+- **错误分类 (nv_requests)**: `status != 200` (caller=cc4101-primary) → **0 行** (完全无错误)。
+- **tier (nv_tier_attempts)**: 活查 111 全 `nvcf_pexec` (k0=22,k1=22,k2=22,k3=22,k4=23),
+  **0 error**。连续第十一轮 (R1188→R1198) 完全无瞬时: R1187 的 k0 单次 NVCFPexecTimeout
   持续自愈未复发, 属固定 egress 抖动非回归。无 429 / empty / 新错误类型。
-- **fallback**: 注入 f=171 (总线), 均档; 无实际触发 ms fallback (SR 100%)。
-- **buffer 日志 (docker logs nv_gw --since 30m)**: 全 attempt-1 direct flush
-  (req 42ddfdd1/202d1e26/36e5c37c/855decc0 等 `NV-BUFFER-SUCCESS` elapsed 2-15s,
-  verdict 均 success_text/success_tool_call), 无退避无 WAIT 无 buffer_exhausted。
-- **容器健康**: nv_gw Up 26h, cc4101 Up 26h, `nv_gw_stable` Up 6 days, /health 均 ok。
+- **fallback**: 注入 f=181 (总线), 均档; 无实际触发 ms fallback (SR 100%)。
+- **容器健康**: nv_gw Up 27h, cc4101 Up 26h, `nv_gw_stable` Up 6 days, /health 均 ok。
 
 ### 验证
-活查 cc4101-primary 106/106 = 100% SR, 0 非-200; tier 活查 106 全 pexec_success 0 error;
-fallback 0%; buffer 无退避 (全 direct flush attempt-1);
-nv_gw (Up 26h)/cc4101 (Up 26h)/nv_gw_stable (Up 6 days) health ok; 链路稳定无改码条件。
+活查 cc4101-primary 110/110 = 100% SR, 0 非-200; tier 活查 111 全 nvcf_pexec 0 error;
+fallback 0%; nv_gw (Up 27h)/cc4101 (Up 26h)/nv_gw_stable (Up 6 days) health ok;
+链路稳定无改码条件。
 
 ## 参数快照 (nv_gw + cc4101, 本轮注入无变更)
 
@@ -42,6 +38,7 @@ nv_gw (Up 26h)/cc4101 (Up 26h)/nv_gw_stable (Up 6 days) health ok; 链路稳定�
   (stairs 90×5=450s), NVU_DISABLE_MS_FALLBACK=0, NVU_FORCE_STREAM_UPGRADE=0,
   NVU_PEER_FB_SKIP_MODELS=glm5_2_nv,dsv4p_nv, KEY_COOLDOWN_S=30, INTEGRATE_KEY_COOLDOWN_S=90,
   TIER_COOLDOWN_S=180, MIN_OUTBOUND_INTERVAL_S=10, NVU_BUFFER_CALLERS=cc4101-primary,openclaw2,
+  NV_INTEGRATE_KEY_COOLDOWN_S=90, NVU_FORCE_STREAM_UPGRADE_TIMEOUT=150
   (全 key bind fid index 0=281478d0-f307, dsv4f0731_nv 单模式)。
 - **cc4101**: PRIMARY_UPSTREAM_MODEL=dsv4f0731_nv, PRIMARY_UPSTREAM_URL=http://nv_gw:40006/v1/messages,
   FALLBACK_UPSTREAM_MODEL=glm5_2_ms, FALLBACK_UPSTREAM_URL=http://ms_gw:40007/v1/chat/completions,
@@ -49,12 +46,12 @@ nv_gw (Up 26h)/cc4101 (Up 26h)/nv_gw_stable (Up 6 days) health ok; 链路稳定�
   PRIMARY_SKIP_S=30, UPSTREAM_TIMEOUT=130, UPSTREAM_IDLE_TIMEOUT=150。
 
 ## 上轮
-R1196 (NOP — 活查 104/104 全 200, 0 错误) → R1197 确认:
-活查 106/106 全 200, 0 错误, 链路持续静稳无新事件。
-链路跨四十轮全绿。
+R1197 (NOP — 活查 106/106 全 200, 0 错误) → R1198 确认:
+活查 110/110 全 200, 0 错误, 链路持续静稳无新事件。
+链路跨四十一轮全绿。
 
 ## 下一步
 维持静稳观察。**核心监控: 是否重现独立瞬时 burst 及复发间隔**。
-Burst2 后已持续无任何 cc2 异常, 穿越四十轮 (R1158→R1197) 整窗全绿。
-k0 偶发 NVCFPexecTimeout 已连续 10 轮 (R1188→R1197) 未复发 (最近一次 R1187),
+Burst2 后已持续无任何 cc2 异常, 穿越四十一轮 (R1158→R1198) 整窗全绿。
+k0 偶发 NVCFPexecTimeout 已连续 11 轮 (R1188→R1198) 未复发 (最近一次 R1187),
 继续通过 `ssleof-error-transient-egress-blip` 记忆跟踪, 持续分布才查 mihomo 线路。
