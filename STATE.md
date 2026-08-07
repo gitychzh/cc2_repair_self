@@ -1,23 +1,23 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: **R1002 (NOP 巡检轮/不改码 — cc2 主链路连续第 110 轮 100% 干净; 主链专属错误 0 rows; fallback 0 次)**
+> 当前轮: **R1003 (NOP 巡检轮/不改码 — cc2 主链路连续第 111 轮 100% 干净; 主链专属错误 0 rows; fallback 0 次)**
 > cc4101-primary (主 nv_gw:40006) 实时 30min = **109/109 = 100% SR, 0 bad** (live 复核);
 > cc4101-primary 专属错误 = **0 rows** (109 request 全 200);
 > 容器: nv_gw Up 12h, cc4101 Up 12h, health 全 200
-> 上轮: R1001 (NOP, 主链 112/112=100%)
+> 上轮: R1002 (NOP, 主链 109/109=100%)
 
-## 本轮 (R1002) 改动 + 依据 + 验证
+## 本轮 (R1003) 改动 + 依据 + 验证
 
-### 改动: 无 (NOP。cc2 主链路连续 110 轮 100% 干净, 主专属错误 0 rows; 本轮 window 内 nv_requests 的 5 条 bad 全属 hermes)
+### 改动: 无 (NOP。cc2 主链路连续 111 轮 100% 干净, 主专属错误 0 rows; 本轮 window 内 nv_requests 的 5 条 bad 全属 hermes)
 
 ### 依据 (live 复核 2026-08-07 + 注入轮前链路分析)
 
 - 30min cc4101-primary (主 nv_gw:40006) = **109/109 全 200 = 100% SR, 0 bad** (live re-pull)。
 - 主链专属错误 (caller=cc4101-primary, status!=200) = **0 rows** (错误分组为空)。
 - 本轮 window 内 nv_requests 总 bad = 5 条, **经归属判定全属 hermes**
-  (dsv4f0731_nv 502: 2 all_tiers_exhausted + 2 zombie_empty_completion + 1 stream_absolute_cap, 越界宿主 fid 52e1ddb6 泄漏)。
-- fallback (cc_requests 30min) = **0 次** (110 req 全未 fallback_triggered, 0.0%)。
-- buffer 日志: 无 BUFFER-/WAIT- 停滞 (全一次成功)。
+  (dsv4f0731_nv 502: 3 zombie_empty_completion + 2 all_tiers_exhausted, 越界宿主 fid 52e1ddb6 泄漏)。
+- fallback (cc_requests 30min) = **0 次** (primary 1979/1979 全 200; 5 条 upstream_used=fallback 为 hermes 越界, 非主链)。
+- buffer 日志: 全 attempt=1 一次成功 (8-12s), 无 BUFFER-/WAIT- 停滞。
 - 主链当前首代模型 = **dsv4f0731_nv**。
 
 ### 本轮数据
@@ -27,25 +27,25 @@
 | 主 nv_gw(40006) cc4101-primary | **109/109 = 100% SR, 0 bad** (live re-pull) | ✅ |
 | 主链专属错误 (caller=cc4101-primary) | **0 rows** | ✅ |
 | nv_requests 总 bad (非 200) | 5 条, 全属 hermes (dsv4f0731_nv 502), 主链 0 | ✅(主链) |
-| 30min fallback (cc_requests) | 0 次 (110 req 全未 fb, 0.0%) | ✅ |
-| buffer/wait | 无异常日志 (全一次成功) | ✅ |
+| 30min cc_requests primary | 1979/1979 = 100% OK, fallback 0 | ✅ |
+| buffer/wait | 全 attempt=1 成功, 无停滞 | ✅ |
 | 容器 | nv_gw Up 12h, cc4101 Up 12h, health 全 200 | ✅ |
 
 ### 验证
 - 30min nv_requests cc4101-primary = 109/109 (0 bad)。
 - 主链专属错误分组 = 空 (0 rows)。
 - 5 条非 200 经归属判定 hermes (dsv4f0731_nv 502), 非 cc2 主链。
-- cc_requests fallback = 0 次 (110 req 全未 fallback_triggered)。
-- buffer 日志: 无 BUFFER-/WAIT- 停滞。
+- cc_requests primary 1979/1979 = 100% OK, fallback 0 次。
+- buffer 日志: 全 attempt=1 成功, 无 BUFFER-/WAIT- 停滞。
 - health: 4101/40006 全 200; 容器 nv_gw/cc4101 皆 Up。
 
 ### 关键判断
-cc2 主链路连续第 **110** 轮 (R893-R1002) 100% SR 干净, 主链专属错误 0 rows。
+cc2 主链路连续第 **111** 轮 (R893-R1003) 100% SR 干净, 主链专属错误 0 rows。
 本轮 5 条 bad (dsv4f0731_nv 502) 归属全属 hermes 越界宿主 (fid 52e1ddb6 泄漏) — 与主链 host
 分离保持, 主链 109/109 全 200。fallback 0 次, 无新 cc2 主链错误类, 无持久 key 疲劳。
 buffer + multi-key round-robin + func_health 完全吸收瞬态错误。
 **不改码**: ①主链 SR 100% + 专属错误 0 行, 无优化需求; ②本轮 bad 全属 hermes 越界, 主链无根因可查;
-③ multi-key round-robin + func_health + buffer 已达稳态, 无参数可调。
+③ multi-key round-robin + func_health + buffer (attempt=1 全成功) 已达稳态, 无参数可调。
 
 ## 下一步
 - 保持 NOP 观察, 主链 dsv4f0731_nv 为首代, 无需参数改动。
