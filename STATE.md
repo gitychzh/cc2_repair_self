@@ -1,60 +1,64 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: **R1093 (NOP 巡检轮/不改码 — cc2 主链 103/104=99.0% SR, 1 bad=502 buffer_exhausted R1088 已知 req=9baaf179 尾迹, self-heal 复窗口零新增502; cc_requests 96/96=100% fallback 0.0%; per-key 全 pexec_success 仅 k2 1× 一次性 RD; buffer attempt-1 直flush 4-10s 零重试; 容器全 200 零级联)**
-> cc4101-primary (主 nv_gw:40006) 实测 30min = **103/104 = 99.0% SR, 1 bad**
-> — 唯一 bad (13:15:13 UTC req=9baaf179) 与 R1088~R1092 **完全同一 request_id**, 历轮已知 124K-token thinking
->   流多 US egress IP 瞬时 SSLEOFError transient blip 尾迹, **非新错误**, 无任何新签名 502
-> self-heal 铁证: 9baaf179 (13:15:13 UTC) 之后 status!=200 → **0 条** (复窗口零新增 502)
-> cc_requests 真实 SR 96/96 = **100.0%**, fallback 0/96 = 0.0%
-> tier 错误: 30min 全 key pexec_success (k2 唯一 1× 一次性 NVCFPexecRemoteDisconnected, 非分布), **零持续 tier 错误**
-> buffer 复窗口 attempt-1 直flush 4-10s 秒回, **零 attempt 重试** = self-heal 完全健康
-> ⚠️ 3h 观察: buffer_exhausted 502 由 3 distinct req (ec39dd9b 11:02 / c107bc7e 12:19 / 9baaf179 13:15) 呈类级 ~1/h 复现, 列为下一轮监测信号 (本轮不改)
-> 容器 (/health 复核 2026-08-07): nv_gw 200, cc4101 200, dsv4p_nv40066 200; nv_gw Up 23h, cc4101 Up 18h
-> 上轮: R1092 (NOP, 主链 98/99=99.0% 1 bad 同根因)
+> 当前轮: **R1094 (NOP 巡检轮/不改码 — cc2 主链 115/115=100.0% SR 零错误, 30min 0 bad 无 502; cc_requests 95/95=100% fallback 0.0%; 历史 90min 窗口仅 2 bad=c107bc7e/9baaf179 历轮已知同一 12-13 UTC 尾迹, 自 13:15 UTC 后零新增; per-key 全 pexec_success 仅 k2 1× 一次性 RD; buffer 全 attempt-1 直flush 5-11s 秒回, 唯一 k3 transient execute_failed 5s backoff attempt-2 自愈零级联; 容器全 200)**
+> cc4101-primary (主 nv_gw:40006) 实测 30min = **94/94 = 100.0% SR, 0 bad** (hermes 21/21, 合计 115/115=100%)
+> — **零 502, 零错误, 无任何新签名**
+> cc_requests 真实 SR 95/95 = **100.0%**, fallback 0/95 = 0.0%
+> 90min window 仅 2 bad 均为历轮已知: c107bc7e (12:19 UTC) + 9baaf179 (13:15 UTC, R1088~R1093 同 req)
+>   → 自 13:15 UTC 9baaf179 后 status!=200 → **0 条新 502** (self-heal 零级联)
+> tier 错误: 30min 全 key pexec_success, 唯一 k2 1× NVCFPexecRemoteDisconnected (一次性非分布)
+> buffer 复窗口全 attempt-1 直flush 5-11s (535 行 BUFFER 日志), 唯一 rq=8ed96432 k3 execute_failed 5s backoff
+>   → attempt-2 success_tool_call 23.9s flush (transient k3, 机制按设计自愈, 零 502) — 【本轮唯一注意点】
+> 3h buffer_exhausted: 仍仅 R1093 已知 3 distinct req (ec39dd9b 11:02/c107bc7e 12:19/9baaf179 13:15), **本轮零新增**
+> 容器 (/health 复核 2026-08-07 21:53 CST): nv_gw 200, cc4101 200, dsv4p_nv40066 200; nv_gw Up 18h, cc4101 Up 18h
+> 上轮: R1093 (NOP, 主链 103/104=99.0% 1 bad 同根因)
 
-## 本轮 (R1093) 改动 + 依据 + 验证
+## 本轮 (R1094) 改动 + 依据 + 验证
 
-### 改动: 无 (NOP。103/104=99.0% 仅 1 bad 为 R1088 同根因 (req=9baaf179) 多 IP 瞬时 SSLEOF egress blip 尾迹, 历轮已知
-### 容器尾迹号, 同一 request_id, 复窗口零新增 502, 无配置漂移, 无持续分布, 无参数可调。3h 类级 ~1/h 复现值监测不改)
+### 改动: 无 (NOP。30min 主链 115/115=100.0% 零错误零 fallback, 90min 窗口仅 2 bad = 历轮已知同一 12-13 UTC 尾迹
+### (c107bc7e + 9baaf179), 自 13:15 UTC 后零新增, 无配置漂移, 无新签名。唯一 k3 一次性 execute_failed 已按 buffer
+### 5s backoff 自愈, 属健康自愈行为, 无参数可调)
 
-### 依据 (轮前注入 21:42:33 CST + DB/日志复核 2026-08-07 21:4x CST + 容器 /health 复核)
+### 依据 (轮前注入 21:51:33 CST + DB/日志实测 2026-08-07 21:53 CST + 容器 /health 实测)
 
-- **30min cc4101-primary (主 nv_gw:40006) = 103×200 + 1×502 = 104 total, SR = 99.0%**
-- **唯一 bad 定位铁证**: `SELECT request_id,status,error_type,duration_ms,created_at WHERE status!=200 AND caller='cc4101-primary'
-  AND created_at>now()-interval '90 min'` → **req=9baaf179, 502 buffer_exhausted, 40665ms, 2026-08-07 13:15:13 UTC**。
-  该 request_id 与 R1088~R1092 已根因 req **逐字一致**, 同一已知 historical bad, 无任何新签名 502。
-- **self-heal 铁证**: `created_at>'2026-08-07 13:15:13 UTC' AND status!=200` → **0 条** (9baaf179 后无任何 502 新增)。
-- **cc_requests 真实 SR (含 fallback)**: 96/96 = **100.0%**, **fallback 0/96 = 0.0%** (bad 已计为 NV 非成功; 复窗口全走主链)。
-- **tier 错误**: 30min 仅 `pexec_success` (k0 20/k1 17/k3 20/k4 22, k2 23+1× NVCFPexecRemoteDisconnected); **零持续 tier 错误** (k2 1× RD 一次性, 非分布)。
-- **buffer 日志** (--since 2h, 复窗口 21:42-21:45 CST): 每条 attempt-1 verdict=success_tool_call 直 flush 4-10s 秒回,
-  **零 attempt 重试** → self-heal 完全健康。
-- **⚠️ 3h buffer_exhausted 类级复现观察**: 3h horizon 内 502 由 3 distinct req 组成 — `ec39dd9b` (11:02, 58.9s)、`c107bc7e` (12:19, 62.8s)、
-  `9baaf179` (13:15, 40.7s), 呈 **~1/h 类级复现**, 不再是严格"单一已知尾迹"。均同属 buffer_exhausted (124K+ thinking 大流瞬时
-  SSLEOF blip 耗尽 buffer budget), 每次 self-heal 零级联。**列为下一轮监测信号, 本轮不改** (SR 仍≥99%, fallback 0%, buffer 自愈 100%)。
-- 容器 /health 实测: 40006 nv_gw 200, 4101 cc4101 200, 40066 dsv4p_nv40066 200。
+- **30min nv_requests = 115×200, 0 非200**: cc4101-primary 94×200 + hermes 21×200 = **115/115 = 100.0% SR**, 错误分类 `(0 rows)`。
+- **cc_requests 真实 SR (含 fallback)**: 95/95 = **100.0%**, fallback 0/95 = **0.0%**。
+- **90min 历史 bad 核对**: window 内仅 2× 502 buffer_exhausted — `c107bc7e` (12:19 UTC) + `9baaf179` (13:15 UTC),
+  均为 **可追溯历轮已知 request_id** (R1093 已根因 3h 观察组成员)。无任何新签名 502。
+- **self-heal 铁证**: `created_at>'2026-08-07 13:15:13 UTC' AND status!=200` → **0 条** (9baaf179 后零新增 502)。
+- **tier 错误**: 30min 94× `pexec_success` + 唯一 1× k2 `NVCFPexecRemoteDisconnected` (一次性, 非分布, 历轮已知 transient 模式);
+  **零持续 tier 错误**。
+- **buffer 日志** (--since 30m, 535 行 BUFFER): 绝大多数 attempt-1 直 flush 5-11s (success_text / success_tool_call) 秒回。
+  **唯一 retry 案例 req=8ed96432**: attempt-1 execute_failed (key=k3) → 5s backoff → attempt-2 success_tool_call 23.9s flush 3.2KB。
+  → 一次性 k3 transient execute_failed, buffer 机制按设计 backoff 自愈, **未产生 502, 零级联**。这是本轮唯一非 attempt-1 直通案例,
+  但结果健康 (自愈成功), 不构成回归。
+- **3h buffer_exhausted 类级复现观察**: 3h 窗口仍仅 R1093 已知 3 distinct req — `ec39dd9b` (11:02, 58.9s)、`c107bc7e` (12:19, 62.8s)、
+  `9baaf179` (13:15, 40.7s)。**本轮零新增**, 维持 ~1/h 低频类事件观察, 未衰减未加剧。**列为下一轮监测信号, 本轮不改**
+  (SR 100%, fallback 0%, buffer 自愈 100%)。
+- 容器 /health 实测 2026-08-07 21:53 CST: 40006 nv_gw 200, 4101 cc4101 200, 40066 dsv4p_nv40066 200。
 
 ### 本轮数据
 
 | 指标 | 值 | 状态 |
 |---|---|---|
-| 主 nv_gw(40006) cc4101-primary | **103/104 = 99.0% SR, 1 bad** (R1088 同 req, 已根因) | ⚠️→self-heal 复窗口 0 新增 502 |
-| 30min 错误分类 | 仅 1× buffer_exhausted (历轮已知容器尾迹) | ✅ 非新错误 |
-| cc_requests 真实 SR | 96/96 = 100.0%, fallback 0/96 = 0.0% | ✅ |
-| per-key / tier 错误 | 5 key 全 pexec_success; 仅 k2 1× 一次性 RD | ✅ 零持续 tier 错误 |
-| buffer | 复窗口 attempt-1 直flush 4-10s 秒回, 零重试 | ✅ self-heal 完全健康 |
-| 3h buffer_exhausted 类级 | ec39dd9b/c107bc7e/9baaf179 三 distinct req, ~1/h | ⚠️ 监测, 不改 |
-| 容器 /health | 40006/4101/40066 全 200; nv_gw Up 23h, cc4101 Up 18h | ✅ |
+| 主 nv_gw(40006) 30min | cc4101-primary 94/94 + hermes 21/21 = **115/115 = 100.0% SR, 0 bad** | ✅ 全绿 |
+| 30min 错误分类 | `(0 rows)` — **零错误** | ✅ |
+| cc_requests 真实 SR | 95/95 = 100.0%, fallback 0/95 = 0.0% | ✅ |
+| 90min 历史 bad | 仅 c107bc7e + 9baaf179 (历轮已知 12-13 UTC 尾迹), 自 13:15 后零新增 | ✅ self-heal |
+| per-key / tier 错误 | 5 key 全 pexec_success; 唯一 k2 1× 一次性 RD | ✅ 零持续 tier 错误 |
+| buffer | 全 attempt-1 直flush 5-11s; 唯一 rq=8ed96432 k3 retry 5s backoff → attempt-2 自愈 | ✅ healthy (无 502) |
+| 3h buffer_exhausted | 仍仅 3 distinct req (ec39dd9b/c107bc7e/9baaf179), 本轮零新增 | ⚠️ 监测, 不改 |
+| 容器 /health | 40006/4101/40066 全 200; nv_gw Up 18h, cc4101 Up 18h | ✅ |
 
 ## 下一步
-- 保持 NOP 观察。本轮 1 transient 502 = R1088~R1092 完全同一 req=9baaf179 (历轮已知 124K thinking 流瞬时 SSLEOF egress blip
-  尾迹), buffer attempt-1 秒回证明 self-heal 机制健壮, 非配置漂移。
-- **新关注点 (3h 类级复现)**: 3h 内 buffer_exhausted 由 3 distinct req (ec39dd9b/c107bc7e/9baaf179) 呈 ~1/h 类级复现,
-  不再是单一已知尾迹, 而是 124K+ thinking 大流高峰期瞬时 egress SSLEOF blip 耗尽 buffer budget 的低频类事件。每次 self-heal
-  零级联, SR 仍≥99%。若未来 2-4 轮保持 ~1/h 稳定复现不衰减, 再评估: ① 超大 input (~124K+) thinking 流 skip buffer 直通,
-  避免 450s 预算被一次大流耗尽; ② 或放大 NVU_BUFFER_TIMEOUT_STAIRS 末级预算给大流出更高容错。本轮不动作。
-- 若 egress IP (代理线路) 未来多轮连续失败不再 attempt-1 直flush, 才查该 mihomo 代理端口。
+- 保持 NOP 观察。本轮 30min 全绿 100%, 唯一注意点是 req=8ed96432 的 k3 一次性 execute_failed — 已按 buffer 5s backoff 自愈,
+  属机制设计内健康自愈, 非回归。若未来 k3 连续多次 execute_failed 不再 attempt-2 恢复, 才查 k3 对应 mihomo 代理线 (态 7896)。
+- **3h buffer_exhausted ~1/h 类级复现观察保持**: 本轮零新增, 3 distinct req 均为 12-13 UTC 时段 (午前高峰) 已知尾迹。
+  若未来轮次新 distinct req 持续以 ~1/h 繁殖且 SR 开始跌破 99%, 再评估: ① 超大 input (~124K+) thinking 流 skip buffer 直通;
+  ② 放大 NVU_BUFFER_TIMEOUT_STAIRS 末级预算。本轮不动作。
+- 若 egress IP (代理线路) 多轮连续失败不再 attempt-1 直flush, 才查该 mihomo 代理端口。
 
-## 参数快照 (未动, 与上轮 R1092 一致)
+## 参数快照 (未动, 与上轮 R1093 一致)
 - cc4101: PRIMARY_UPSTREAM_URL=http://nv_gw:40006/v1/messages, PRIMARY_UPSTREAM_MODEL=dsv4f0731_nv,
   FALLBACK_UPSTREAM_URL=http://ms_gw:40007/v1/chat/completions, FALLBACK_UPSTREAM_MODEL=glm5_2_ms,
   CC4101_STREAM_TOTAL_DEADLINE_S=470, PRIMARY_HEADER_TIMEOUT=400, CC4101_PRIMARY_FAIL_THRESHOLD=3, CC4101_PRIMARY_SKIP_S=30,
