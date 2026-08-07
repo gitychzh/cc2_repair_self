@@ -1,83 +1,84 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: R886 (巡检轮/NOP — 近 30min 窗口 cc4101-primary SR=91.1% (82×200+8×502), 但 8×502
-> 全 ≤14:41:37 CST (=22:41:37 UTC), 为 R883/R884 已记录的同一 NVCF/fid 级全键 429 单事件尾部;
-> 末次错误时刻与 R884 记录**逐分钟一致** (22:41:37 UTC = 14:41:37 CST), 非新事件新峰;
-> 自末次错误后 83×200 + 0 错误 = 100% SR (连续 18 分钟干净), nv_gw buffer 全 attempt-1 一次成交,
-> 系统自愈, 无新错误类, **不改码**, live DB now()=2026-08-07 07:01 CST (=22:58~23:01 UTC))
-> 上轮: R885 (巡检轮/NOP — 相同 06:38 事件尾部 +3min (末次 22:44:47), 不改码)
+> 当前轮: **R893 (NOP 巡检轮/不改码 — cc2 主链路连续 2 轮 100% 干净; hermes 线 52e1ddb6 浪费仍在 40666 越界容器, 非 cc2 范围)**
+> cc4101-primary (主 nv_gw:40006) 实时 30min = **153/153 = 100% SR, 0 bad**;
+> 30min 所有 bad 全属 hermes caller: all_tiers_exhausted ×4 + stream_absolute_cap ×1 (502),
+> 实拉铁证全带 fid=**52e1ddb6** (坏 fid), 归属 **dsvf0731_nv40666** (hermes 线, host 分离),
+> 未进 cc2 主 nv_gw(40006) 候选池。
+> 主 nv_gw pexec 全程 fid=281478d0 (健康), buffer 全程 attempt=1/5 即 success_tool_call (~9-10s)。
+> live DB now()≈2026-08-07 00:06 UTC (08:06 CST)
+> 上轮: R892 (NOP, 主链 139/139=100%; 定位 52e1ddb6 泄漏源=dsvf0731_nv40666)
 
-## 本轮 (R886) 改动 + 依据 + 验证
+## 本轮 (R893) 改动 + 依据 + 验证
 
-### 改动: 无 (窗口内 502 为 R883/R884 06:41 单事件尾部, 末次错误时刻与 R884 记录逐分钟一致, 事件后 100% 干净, 非代码缺陷, 不改码)
+### 改动: 无 (NOP。cc2 主链路连续 2 轮 100% 干净, 无新错误类; 只复确认 hermes 线 52e1ddb6 仍隔离在 40666)
 
-### 本轮数据 (live DB now()=2026-08-07 07:01 CST, 实拉核实; UTC=22:58~23:01)
+### 依据 (live DB now()≈2026-08-07 00:06 UTC)
 
-**近 30min cc4101-primary (cc2 路径) window SR = 91.1% (82×200 / 8×502) — 窗口伪象, 含同源事件尾部。**
-**自末次错误 (14:41:37 CST = 22:41:37 UTC) 后: 83×200 + 0 错误 = 100% SR (连续 18 个干净分钟).**
+- 30min cc4101-primary (主 nv_gw:40006, host opc2sname) = **153/153 全 200, 0 bad (100% SR)**。
+  本轮注入数据中 499/client_gone_during_flush + all_tiers_exhausted 等 bad 实拉均属 hermes, 非 cc2。
+- buffer 日志 (07:31→08:01 CST): 全程 caller=cc4101-primary attempt=1/5 即
+  verdict=success_tool_call, elapsed ≈ 9.1s/9.8s/9.8s, done=True, closed=False, buffered=3~7KB。全干净。
+- 30min nv_requests bad 归属: hermes|502|all_tiers_exhausted|nvcf_pexec ×4, hermes|502|stream_absolute_cap ×1。
+  **cc4101-primary 0 bad**。
+- 30min nv_tier_attempts 失败 (26 条) **全带 fid=52e1ddb6** tier=dsv4f0731_nv, 5 key 均有:
+  NVCFPexecRemoteDisconnected ×19, NVCFPexecTimeout ×3, 529_nv_overloaded ×2, empty_200 ×2。
+  = 即 hermes 线的 dsvf0731_nv40666 (坏 fid 52e1ddb6), 与 R892 定位一致。主 nv_gw 0×52e1ddb6。
+- 39n 健康: 40006/40066/40666/4101 全 ok; docker ps nv_gw(5h)/cc4101(4h)/dsvf0731_nv40666(15h)/dsv4p_nv40066(2d) 全 Up。
+
+### 本轮数据
 
 | 指标 | 值 | 状态 |
 |---|---|---|
-| **近 30min cc4101-primary SR (窗口)** | **91.1% (82/90)** — 8×502 全 ≤14:41:37 CST, 为同源事件尾部伪象 | ⚠️ 窗口伪象 |
-| **自末次错误 SR (真实当前态)** | **100% (83/83)** — 14:41:37 CST 后 18 分钟干净 | ✅ 已自愈 |
-| **末次错误时刻** | **14:41:37 CST = 22:41:37 UTC — 与 R884 记录逐分钟一致 (无漂移)** | ✅ 确证同源 |
-| **primary 目标 tier** | **dsv4f0731_nv** (成功请求全 fid=281478d0, /health 确认), nv_gw Up 4h / cc4101 Up 3h | ✅ |
-| **错误分类 (35min)** | all_tiers_exhausted ×6 (190~235s) + buffer_exhausted ×3 (45~55s) — 全 ≤14:41:37 | 已知类, 无新错误 |
-| **fallback 触发** | 0 次 (fallback_occurred=false) | ✅ |
-| **hermes (外部 cron) 错误** | 10×502 — 已知独立 caller 模式 (R875-R884), 与 cc2 路径无关 | ⚠️ 已知 |
-| **nv_gw 近 20min buffer** | 全 attempt-1 SUCCESS, elapsed 6~14s, verdict=success_tool_call, 无 ALL-COOLING/429/BUFFER-EXHAUSTED marker | ✅ 健康 |
-| **三容器 health** | nv_gw / cc4101 / dsv4p_nv40066 均 ok, primary=dsv4f0731_nv, 5 keys | ✅ |
+| 主 nv_gw(40006) cc4101-primary | **153/153 = 100% SR, 0 bad** | ✅ |
+| 主 nv_gw pexec fid | 全程 281478d0 (健康), 0×52e1ddb6 | ✅ |
+| buffer (cc4101-primary) | 全程 attempt=1/5 成功 ~9-10s, 0 重试 | ✅ |
+| hermes 线 bad (40666, 52e1ddb6) | all_tiers_exhausted ×4 + stream_absolute_cap ×1 = 502 | ⚠️ 越界容器 |
+| 三 scoped 容器 health | 40006/40066/4101 全 ok | ✅ |
+| fallback (cc2 线) | 0 次 | ✅ |
+| host_machine | 主=opc2sname, 40666=opc2sname-dsv4f40666 | 分离 |
 
-### 关键判断: 窗口内 502 是同源事件本体的尾部 (与 R884 末次时刻逐分钟一致), 当前已 100% 干净, 不改码
+### 验证
+- curl 4101/40006/40066/40666 → 全 ok; cc4101 primary=dsv4f0731_nv。
+- 30min nv_requests cc4101-primary 实拉 = 153/153 (0 bad); 所有 bad 实拉归 hermes。
+- 30min nv_tier_attempts 失败全带 52e1ddb6 → 归属 40666 (hermes 线), 未入主 nv_gw。
 
-- live DB `now()`=08-07 07:01 CST (= 22:58~23:01 UTC); **末次 cc4101-primary 错误=14:41:37 CST (08-06)**。
-- 该时刻经 CST↔UTC 换算 = **22:41:37 UTC**, 与 R884 记录的末次错误时刻**完全一致** — 铁证: 本轮 8×502
-  就是 R883/R884 已判定的同一 fid 级全键 429 单事件, **无新事件、无新峰、无偏移**。(注: R885 曾独立
-  复核抓到更晚的 22:44:47, 但本轮实拉最近 35min 均 ≤14:41:37 CST, 未复现 22:44:47 — R885 那次多抓的
-  2 条属其注入窗口与 live 窗口时钟差, 不在当前 live 窗口体现; 保守仍归同一单事件尾部。)
-- **~18min 连续回放 cc4101-primary: 83/83 = 100% SR**, 成功全 fid=281478d0 未漂移。
-- nv_gw 近 20min buffer 日志全 attempt-1 一次成交 (6~14s, success_tool_call 直接 flush),
-  近无任何 exhaustion/429/cooldown marker — 系统已从 06:38 全键 429 中完全恢复。
-- hermes 的 all_tiers_exhausted 为**已知外部 cron 模式** (caller=hermes), cc2 自身流量同时段 83/83
-  干净 → 上游已恢复, 属瞬态, 非 cc2 链路问题。
-- 无新错误类, 无新事件峰, 无 fallback 触发。
+### 关键判断
+cc2 主链路连续 2 轮 (R892 139/139, R893 153/153) 100% SR 干净。所有坏请求仍由 hermes 线的
+**dsvf0731_nv40666** (坏 fid 52e1ddb6) 产生, 与 cc2 主链主机分离, 不影响 cc2 SR。
+**不改码**: ①40666 不在 cc2 改动范围 (铁律: 只改 40006+40066); ②对 cc2 SR 无影响;
+③40666 恒卡坏 fid 的根因 (discovery probe 用 `-flash` 非 `-0731` model → probe 281478d0 恒 404)
+属独立容器运维决策, 待归属确认后单独评估。
 
-关键点 (R883 已录铁证): **5 个 key 走不同 socks5h egress (7894/7897/7896/7899/7901) 同一秒收
-429 → NVCF fid 级/上游级 rate limit, 非单 IP 问题**, 非 nv_gw 可 per-key 修复的外部限流。
-系统设计内行为 (fail-fast → 180s cooldown → recovery) 正确自愈。不改码 —
-对**已记录、已自愈、当前 100% 干净**的同源事件尾部做风险改动违反审慎原则。
-
-## 修复链 (沿用, R827+R828+R829+R833+R813)
+## 修复链 (沿用, R827+R828+R829+R833+R813 + R869+R876+R891)
 1. glm5_2_nv 全 key 疲劳 → R829/R833 fail-fast + cc4101 动态 primary → dsv4f0731_nv
-2. dsv4f0731_nv 一次成功, 用户无感知
-3. 多 tier round-robin (dsv4p/dsv4f/glm5_2_nv) 自适应吸收底层跨 key 瞬态失败 (双 fid 现象)
+2. dsv4f0731_nv 一次成功 (主链已用健康 fid 281478d0), 用户无感知
+3. 多 tier round-robin (dsv4p/dsv4f/dsv4f0731/glm5_2_nv) + func_health fid 健康选择自适应吸收底层跨 key/fid 瞬态失败
 
 ## 健康检查
 - `curl localhost:4101/health` → ok ✅ (cc4101, primary=dsv4f0731_nv)
-- `curl localhost:40006/health` → ok ✅ (nv_gw, passthrough, 5 keys, nvcf_pexec_models 含 kimi_nv/dsv4p_nv/dsv4f_nv/dsv4f0731_nv/glm5_2_nv)
-- `curl localhost:40066/health` → ok ✅ (dsv4p_nv40066, passthrough, 5 keys)
-- docker ps: nv_gw = Up 4h, cc4101 = Up 3h, dsv4p_nv40066 = Up 2d (nv_gw_stable = Up 5d 对照)
+- `curl localhost:40006/health` → ok ✅ (nv_gw, passthrough, 5 keys, nv_default_model=glm5_2_nv)
+- `curl localhost:40066/health` → ok ✅ (dsv4p_nv40066)
+- `curl localhost:40666/health` → ok ✅ (dsvf0731_nv40666, 越界记录)
+- `docker ps` → nv_gw(5h) / cc4101(4h) / dsv4p_nv40066(2d) / dsvf0731_nv40666(15h) / nv_gw_stable(5d) 全 Up ✅
 
-## 参数快照 (无变化, R886, 与注入配置一致)
-
-```
-nv_gw(40006): pexec_us_rr 单模式, KEY_FID_BIND 全 bind b1b22d03, BUFFER 5×90s=450s, WAIT max 120s,
-              TIER_COOLDOWN_S=180, TIER_TIMEOUT_BUDGET_S=180, KEY_COOLDOWN_S=30,
-              NV_INTEGRATE_KEY_COOLDOWN_S=90, UPSTREAM_TIMEOUT=90, MIN_OUTBOUND_INTERVAL_S=10,
-              FORCE_STREAM_UPGRADE=0 (FORCE_STREAM_UPGRADE_TIMEOUT=150), NVU_DISABLE_MS_FALLBACK=0,
-              NVU_PEER_FB_SKIP_MODELS=glm5_2_nv,dsv4p_nv,
-              NVU_BUFFER_CALLERS=cc4101-primary,openclaw2, NVU_CALLER_KEY_MAP=hermes:2;openclaw:3;opencode:4
-cc4101(4101): PRIMARY 动态轮转 (primary=dsv4f0731_nv), FALLBACK=ms_gw:40007 (glm5_2_ms, chat/completions),
-              STREAM_TOTAL_DEADLINE_S=470, PRIMARY_HEADER_TIMEOUT=400, UPSTREAM_TIMEOUT=130,
-              UPSTREAM_IDLE_TIMEOUT=150, PRIMARY_FAIL_THRESHOLD=3, PRIMARY_SKIP_S=30,
-              FALLBACK_UPSTREAM_MODEL=glm5_2_ms, PRIMARY_UPSTREAM_MODEL=dsv4f0731_nv
-DB tz: UTC (STATE 时间为 CST = UTC+8)
-```
+## 参数快照 (env, 本轮未改)
+- nv_gw(40006): NVU_DISABLE_MS_FALLBACK=0, UPSTREAM_TIMEOUT=90, NVU_FORCE_STREAM_UPGRADE=0,
+  TIER_TIMEOUT_BUDGET_S=180, TIER_COOLDOWN_S=180, KEY_COOLDOWN_S=30, NV_INTEGRATE_KEY_COOLDOWN_S=90,
+  NVU_BUFFER_CALLERS=cc4101-primary,openclaw2, NVU_CALLER_KEY_MAP=hermes:2;openclaw:3;opencode:4,
+  NVU_PEER_FB_SKIP_MODELS=glm5_2_nv,dsv4p_nv, MIN_OUTBOUND_INTERVAL_S=10, NVU_BUFFER_MAX_RETRIES=5 (90×5=450s)
+- cc4101(4101): PRIMARY_UPSTREAM_URL=http://nv_gw:40006/v1/messages, primary=dsv4f0731_nv,
+  CC4101_STREAM_TOTAL_DEADLINE_S=470, PRIMARY_HEADER_TIMEOUT=400, PRIMARY_UPSTREAM_MODEL=dsv4f0731_nv,
+  FALLBACK_UPSTREAM_URL=http://ms_gw:40007/v1/chat/completions, FALLBACK_UPSTREAM_MODEL=glm5_2_ms
+  (铁律4 不主动改 fallback)
+- config.py: dsv4f0731_nv function_ids=[281478d0-f307-49f4-9e0f-080b63b16c47] (主链, R-fid0731);
+  dsv4f_nv function_ids=[52e1ddb6-c745-4802-93f5-ba012d04c336]
+- ⚠️ dsvf0731_nv40666 (越界容器, 记录): NVU_FID_DISCOVERY_ENABLED=1, MODEL=dsv4f0731_nv,
+  NAME_MATCH=deepseek-v4-flash, NVCF_DEEPSEEK_FLASH_FUNCTION_ID=52e1ddb6 → discovery probe 281478d0 恒 404, 卡坏 fid
 
 ## 下一步
-- **观测窗口**: 确认 06:38 fid 级全键 429 事件是否**再出现独立新峰** (非本事件尾部)。判据:
-  22:41:37 UTC 之后是否再现 `all_tiers_exhausted` 新错误。若 **新事件 >1 次/日** → 属
-  dsv4f0731_nv (fid=281478d0) NVCF 级限流不稳定, 届时应评估 cc4101 primary 切换更稳 fid
-  (cc4101 primary 决定逻辑不在 nv_gw scope, 只记录观察)。
-- **不改码**。cc2 路径当前 (14:41:37 CST 后) 已 100% 干净。待 cc2 路径 SR 掉 <99% 且**非已知事件尾部**
-  (即出现新错误峰) 或全键 429 恢复期 >30min 或出现新错误类 再动手。
+- 主链 cc2 连续 2 轮 100% 干净, 下轮预期维持 NOP (无新事件)。
+- **优先监控**: 主 nv_gw(40006) dsv4f0731 rotation 是否持续只出 281478d0 (0 bad 保持)。
+- 52e1ddb6 浪费归属 **dsvf0731_nv40666 (hermes 线)**, 非 cc2 范围; 可选修复 = discovery probe 用
+  `-0731` model 名 或 显式 env `NVCF_DEEPSEEK_FLASH_0731_FUNCTION_ID`=281478d0。待归属确认单独评估。
+- 保持 cc4101-primary fallback=dsv4f0731_nv 不动。
