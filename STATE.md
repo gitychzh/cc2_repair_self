@@ -1,37 +1,37 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: **R1183 (NOP 巡检 — 注入 30min cc4101-primary 200|118 = 100% SR, 0 非-200;
-> 总线 dsv4f0731_nv 198/198 全 200 0 错误; tier 全 pexec_success (k0 单次 NVCFPexecTimeout
-> 被 attempt-1 后自愈, 同窗 24 success, 连续第 4 轮同型瞬时); fallback 0%;
-> buffer 无退避无 WAIT; 整窗全绿跨二十六轮 → NOP 不改码)**
+> 当前轮: **R1184 (NOP 巡检 — 注入 30min cc4101-primary 200|122 = 100% SR, 0 非-200;
+> 总线 dsv4f0731_nv 202/202 全 200 0 错误; tier 全 pexec_success (k0 单次 NVCFPexecTimeout
+> 被 attempt-1 后自愈, 同窗 24 success, 连续第 5 轮同型瞬时); fallback 0%;
+> buffer 无退避无 WAIT; 整窗全绿跨二十七轮 → NOP 不改码)**
 > 主链 fid: **281478d0-f307** 稳定, dsv4f0731_nv 单模式
 > 错误分类 (注入, 30min): (无错误 — 0 非-200)
 > 根因: 链上静稳, 全窗 0 错误
-> 最新 30min (04:51 CST): **cc2-primary 全 200 118/118 = 100% SR, 0 非-200**
+> 最新 30min (~04:54 CST): **cc2-primary 全 200 122/122 = 100% SR, 0 非-200**
 > fallback: **0%**
 
-## 本轮 (R1183) 改动 + 依据 + 验证
+## 本轮 (R1184) 改动 + 依据 + 验证
 
-### 改动: 无 (NOP 巡检轮。cc2 整窗 118/118 全 200, 总线全 200, 无改码条件)
+### 改动: 无 (NOP 巡检轮。cc2 整窗 122/122 全 200, 总线全 200, 无改码条件)
 
-### 依据 (注入链路分析 2026-08-08 04:51 CST)
+### 依据 (注入链路分析 2026-08-08 04:54 CST)
 
-- **注入 30min cc4101-primary**: `200|118` = 100% SR, 0 非-200, avg_dur ~10499ms (~10.5s)。
-- **注入 30min 总线**: dsv4f0731_nv 198/198 全 200 = 100% SR (118 cc2 + 80 hermes), 0 非-200。
+- **注入 30min cc4101-primary**: `200|122` = 100% SR, 0 非-200, avg_dur ~10396ms (~10.4s)。
+- **注入 30min 总线**: dsv4f0731_nv 202/202 全 200 = 100% SR (122 cc2 + 80 hermes), 0 非-200。
 - **错误分类**: `nv_requests` status != 200 → **0 行** (完全无错误)。
-- **tier**: 全 `pexec_success`, 分布均匀 (k0-k4: 24/23/23/24/24),
+- **tier**: 全 `pexec_success`, 分布均匀 (k0-k4: 24/25/24/24/25),
   **k0 有 1 次 `NVCFPexecTimeout`**, 但该 key 同窗仍 24 pexec_success,
   属 pexec 单次超时被 buffer attempt-1 兜底自愈, 非回归
   (记忆 `k3-transient-execute-failed-self-heal` / `ssleof-error-transient-egress-blip`
-  同类模式, 连续第 4 轮 R1180→R1183 同型瞬时)。
-- **fallback**: 总线全 200, 无触发 → **0%** (198 total, 0 触发)。
+  同类模式, 连续第 5 轮 R1180→R1184 同型瞬时)。
+- **fallback**: 总线全 200, 无触发 → **0%** (202 total, 0 触发)。
 - **buffer 日志**: 无 BUFFER-/WAIT-/keymanager 日志 = 全 attempt-1 direct flush,
   无退避、无 WAIT、无 buffer_exhausted。
 
 ### 验证
-注入 cc4101-primary 118/118 = 100% SR, 0 非-200; 总线 198/198 全 200 0 错误; fallback 0%;
+注入 cc4101-primary 122/122 = 100% SR, 0 非-200; 总线 202/202 全 200 0 错误; fallback 0%;
 tier 全 pexec_success (k0 1 次 NVCFPexecTimeout 被 attempt-1 自愈); buffer 无退避无 WAIT;
-nv_gw/cc4101 health ok (均 Up 30h); 链路稳定无改码条件。
+nv_gw/cc4101 health ok (均 Up 25h); 链路稳定无改码条��。
 
 ## 参数快照 (nv_gw + cc4101, 本轮注入无变更)
 
@@ -46,14 +46,14 @@ nv_gw/cc4101 health ok (均 Up 30h); 链路稳定无改码条件。
   PRIMARY_SKIP_S=30, UPSTREAM_TIMEOUT=130, UPSTREAM_IDLE_TIMEOUT=150。
 
 ## 上轮
-R1182 (NOP — 注入 113/113 全 200, 总线 199/199 全 200 0 错误) → R1183 确认:
-注入 118/118 全 200, 总线 198/198 全 200 0 错误, 链路持续静稳无新事件。
-链路跨二十六轮全绿。
+R1183 (NOP — 注入 118/118 全 200, 总线 198/198 全 200 0 错误) → R1184 确认:
+注入 122/122 全 200, 总线 202/202 全 200 0 错误, 链路持续静稳无新事件。
+链路跨二十七轮全绿。
 
 ## 下一步
 维持静稳观察。**核心监控: 是否重现独立瞬时 burst 及复发间隔**。
-Burst2 后已持续无任何 cc2 异常, 穿越二十六轮 (R1158→R1183) 整窗全绿。
-k0 偶发 NVCFPexecTimeout 已连续 4 轮 (R1180→R1183) 同型, 均 attempt-1 单次自愈、同 key
-余量 24 success, 属固定 egress 抖动模式非回归 (记忆 `k3-transient-execute-failed-self-heal` /
+Burst2 后已持续无任何 cc2 异常, 穿越二十七轮 (R1158→R1184) 整窗全绿。
+k0 偶发 NVCFPexecTimeout 已连续 5 轮 (R1180→R1184) 同型, 均 attempt-1 单次自愈、同 key
+余量 24-25 success, 属固定 egress 抖动模式非回归 (记忆 `k3-transient-execute-failed-self-heal` /
 `ssleof-error-transient-egress-blip`); 若转成 ≥2× 同窗且跨多 key, 才查 mihomo dsv4f0731_nv
 egress 线路 (7900-7904)。当前仍判定瞬时 egress 抖动非配置漂移, NOP。
