@@ -1,50 +1,49 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: **R993 (NOP 巡检轮/不改码 — cc2 主链路连续第 101 轮 100% 干净; 唯一坏 4: all_tiers_exhausted ×3 + zombie_empty_completion ×1 全属 hermes, 越界非 cc2 范围; fallback 0 次)**
-> cc4101-primary (主 nv_gw:40006) 实时 30min = **120/120 = 100% SR, 0 bad** (live 复核);
-> cc4101-primary 专属错误 = **0 rows** (120 request 全 200);
+> 当前轮: **R994 (NOP 巡检轮/不改码 — cc2 主链路连续第 102 轮 100% 干净; 唯一坏 2: all_tiers_exhausted ×2 全属 hermes, 越界非 cc2 范围; fallback 0 次)**
+> cc4101-primary (主 nv_gw:40006) 实时 30min = **117/117 = 100% SR, 0 bad** (live 复核);
+> cc4101-primary 专属错误 = **0 rows** (117 request 全 200);
 > 容器: nv_gw Up, cc4101 Up (health 全 200)
-> 上轮: R992 (NOP, 主链 117/117=100%)
+> 上轮: R993 (NOP, 主链 120/120=100%)
 
-## 本轮 (R993) 改动 + 依据 + 验证
+## 本轮 (R994) 改动 + 依据 + 验证
 
-### 改动: 无 (NOP。cc2 主链路连续 101 轮 100% 干净, 主专属错误 0 行; 唯一 bad 全属 hermes+已知坏 fid 52e1ddb6 线)
+### 改动: 无 (NOP。cc2 主链路连续 102 轮 100% 干净, 主专属错误 0 行; 唯一 bad 全属 hermes+已知坏 fid 52e1ddb6 线)
 
 ### 依据 (live 复核 2026-08-07 + 注入轮前链路分析)
 
-- 30min cc4101-primary (主 nv_gw:40006) = **120/120 全 200 = 100% SR, 0 bad** (live re-pull)。
-- 总 nv_requests bad (非 200) = **4 条, 全 caller=hermes 线** (live 复核):
-  all_tiers_exhausted ×3 + zombie_empty_completion ×1, 已知坏 fid 52e1ddb6 hermes
-  宿主越界容器, non cc2 主链。
-- fallback (cc_requests 30min) = **0 次** (live total 120 req, fb=0)。
-- 30min 总模型 SR: dsv4f0731_nv = **97.0% (129/133)** (bad 4 全属 hermes)。
-- nv_tier_attempts 30min: 瞬态逐 key (NVCFPexecRemoteDisconnected×15 / Timeout×3 / empty_200×3)
-  散落, 全被多 key round-robin + func_health + buffer 吸收, 无泄漏为 200 以外。
+- 30min cc4101-primary (主 nv_gw:40006) = **117/117 全 200 = 100% SR, 0 bad** (live re-pull)。
+- 总 nv_requests bad (非 200) = **2 条, 全 caller=hermes 线** (live 复核):
+  all_tiers_exhausted ×2, 已知坏 fid 52e1ddb6 hermes 宿主越界容器, non cc2 主链。
+  本次窗口无 zombie_empty_completion (R993 有 1, 波动)。
+- fallback (cc_requests 30min) = **0 次** (live total 118 req, fb=0)。
+- 30min 总模型 SR: dsv4f0731_nv = **98.5% (130/132)** (bad 2 全属 hermes)。
+- buffer 日志全 attempt=1 一次成功 (flush 1650b~15.9KB, elapsed 1.4~13s); 无 WAIT 停滞, 无多 attempt 泄漏。
 
 ### 本轮数据
 
 | 指标 | 值 | 状态 |
 |---|---|---|
-| 主 nv_gw(40006) cc4101-primary | **120/120 = 100% SR, 0 bad** (live re-pull) | ✅ |
+| 主 nv_gw(40006) cc4101-primary | **117/117 = 100% SR, 0 bad** (live re-pull) | ✅ |
 | 主链专属错误 (caller=cc4101-primary) | **0 rows** | ✅ |
-| 唯一 bad (非 200) | 4 条, 全 caller=hermes 线 (all_tiers×3 + zombie×1) | ⚠️ 越界 |
+| 唯一 bad (非 200) | 2 条, 全 caller=hermes 线 (all_tiers_exhausted ×2) | ⚠️ 越界 |
 | bad caller 归属 | 100% hermes 线; cc2 primary 0 条 | ✅ 隔离 |
-| 30min 总模型 SR (dsv4f0731_nv) | 97.0% (129/133), bad 4 全 hermes | ✅ |
-| fallback (cc_requests) | 0 次 (120 req 全未 fb) | ✅ |
-| tier 瞬态错误 | RemoteDisconnected(15)/Timeout(3)/empty_200(3), 全被吸收 | ✅ |
+| 30min 总模型 SR (dsv4f0731_nv) | 98.5% (130/132), bad 2 全 hermes | ✅ |
+| fallback (cc_requests) | 0 次 (118 req 全未 fb) | ✅ |
+| buffer/wait | 全 attempt=1 一次成功, flush 1.4–13s, 无 WAIT 停滞 | ✅ |
 | 容器 | nv_gw Up, cc4101 Up, health 全 200 | ✅ |
 
 ### 验证
-- 30min nv_requests cc4101-primary = 120/120 (0 bad)。
-- bad 分组 (by caller×err_type): hermes 线 all_tiers_exhausted ×3 + zombie_empty_completion ×1 (fid 52e1ddb6) —
-  全 hermes, cc2 主链 0 bad。
-- cc_requests fallback = 0 次 (120 req 全未 fallback_triggered)。
+- 30min nv_requests cc4101-primary = 117/117 (0 bad)。
+- bad 分组 (by caller×err_type): hermes 线 all_tiers_exhausted ×2 (fid 52e1ddb6) — 全 hermes, cc2 主链 0 bad。
+- cc_requests fallback = 0 次 (118 req 全未 fallback_triggered)。
+- buffer 日志: NV-BUFFER-START/VARDICT/SUCCESS 全 attempt=1 success_tool_call, 无 BUFFER-ATTEMPT>1。
 - health: 4101/40006 全 200; 容器 nv_gw/cc4101 皆 Up。
 
 ### 关键判断
-cc2 主链路连续第 **101** 轮 (R893-R993) 100% SR 干净, 且主链专属错误 0 rows。
-唯一 4 个 bad 请求 100% 属 hermes 线 (caller=hermes + 已知坏 fid 52e1ddb6, all_tiers ×3 +
-zombie ×1), fallback 0 次, 无新 cc2 主链错误类, 无持久 key 疲劳。
+cc2 主链路连续第 **102** 轮 (R893-R994) 100% SR 干净, 且主链专属错误 0 rows。
+唯一 2 个 bad 请求 100% 属 hermes 线 (caller=hermes + 已知坏 fid 52e1ddb6, all_tiers_exhausted ×2),
+fallback 0 次, 无新 cc2 主链错误类, 无持久 key 疲劳。
 buffer 全一次成功, 多 key round-robin (dsv4f0731_nv 为首) + func_health 完全吸收瞬态键错误。
 **不改码**: ①主链 SR 100% + 专属错误 0 行, 无优化需求; ②唯一 bad 全属 hermes 越 cc2 范围;
 ③多 key round-robin + func_health + buffer 已达稳态, 瞬态错误全被吸收, 无参数可调。
