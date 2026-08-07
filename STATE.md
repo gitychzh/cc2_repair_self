@@ -1,40 +1,40 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: **R1055 (NOP 巡检轮/不改码 — cc2 主链路连续第 163 轮 100% 干净; 主链专属错误 0 rows; fallback 0 次)**
-> cc4101-primary (主 nv_gw:40006) 复核 30min = **109/109 = 100% SR, 0 bad** (注入链路分析);
+> 当前轮: **R1056 (NOP 巡检轮/不改码 — cc2 主链路连续第 164 轮 100% 干净; 主链专属错误 0 rows; fallback 0 次)**
+> cc4101-primary (主 nv_gw:40006) 实测 30min = **110/110 = 100% SR, 0 bad**;
 > cc4101-primary 专属错误 = **0 rows** (scoped 错误分组唯一 status=200);
-> nv_requests 总 bad = 2 (zombie_empty_completion×2 502, avg_dur 3047ms), 全属 hermes 越界宿主 (caller JOIN);
-> fallback (cc_requests 30min) = **0 次 / 0.0%** (总 150, 主链 109/109 全 200);
+> nv_requests 总 bad = 2 (zombie_empty_completion×2 502), 全属 hermes 越界宿主 (caller JOIN);
+> fallback (cc_requests 30min) = **0 次 / 0.0%** (总 110, 主链 110/110 全 200);
 > 容器 (/health 复核): nv_gw Up 15h, cc4101 Up 15h, nv_gw_stable Up 5d+, /health 40006/4101 全 200
-> 上轮: R1054 (NOP, 主链 108/108=100%)
+> 上轮: R1055 (NOP, 主链 109/109=100%)
 
-## 本轮 (R1055) 改动 + 依据 + 验证
+## 本轮 (R1056) 改动 + 依据 + 验证
 
-### 改动: 无 (NOP。cc2 主链路连续第 163 轮 100% 干净, 主链专属错误 0 rows; 本轮 window 内 2 条 bad 全属 hermes)
+### 改动: 无 (NOP。cc2 主链路连续第 164 轮 100% 干净, 主链专属错误 0 rows; 本轮 window 内 2 条 bad 全属 hermes)
 
-### 依据 (注入轮前链路分析 18:42 CST + /health 复核 + caller JOIN 2026-08-07)
+### 依据 (注入轮前链路分析 18:46 CST + /health 复核 + caller JOIN 2026-08-07)
 
-- 30min cc4101-primary (主 nv_gw:40006) = **109/109 全 200 = 100% SR, 0 bad** (caller JOIN:
-  cc4101-primary|dsv4f0731_nv|200|109, 无任何非 200)。
+- 30min cc4101-primary (主 nv_gw:40006) = **110/110 全 200 = 100% SR, 0 bad**
+  (caller JOIN 实测: cc4101-primary total=110, ok=110, 无任何非 200)。
 - 主链专属错误 (caller=cc4101-primary, status!=200) = **0 rows**。
-- 本轮 window 内 nv_requests 总 bad = 2 条 (zombie_empty_completion ×2, 502, avg_dur 3047ms),
-  caller JOIN 判定均属 **hermes** (hermes|dsv4f0731_nv|502|2), cc4101-primary 无任何非 200。
-- 30min 按模型 SR = **dsv4f0731_nv SR=98.7% (148/150)** — 唯二 bad 即 hermes 越界 502, 主链无关。
-- fallback (cc_requests 30min) = **0 次 / 0.0%** (总 150, 含 hermes, 主链 109 请求全 200)。
+- 本轮 window 内 nv_requests 总 bad = 2 条 (zombie_empty_completion ×2, 502), caller JOIN
+  实测归属 **hermes** (hermes total=34, ok=32, non200=502), cc4101-primary 无任何非 200。
+- 30min 按模型 SR = **dsv4f0731_nv SR=98.6% (142/144)** — 唯二 bad 即 hermes 越界 502, 主链无关。
+- fallback (cc_requests 30min, 实测) = **0 次 / 0.0%** (总 110, 主链 110 请求全 200)。
 - 主链当前首代模型 = **dsv4f0731_nv** (cc4101.PRIMARY_UPSTREAM_MODEL), 无 tier 降级/无 key 疲劳。
 - nv_tier_attempts (dsv4f0731_nv, 30min) = k0-k4 全 pexec_success (23/20/23/22/21, 另 k3 一条 empty_200) — 无 tier 层致命错误。
-- 30min nv_gw buffer/wait/keymanager 日志: 无缓冲吸收需要 (无 buffer/wait/keymanager 日志, 全 attempt=1 直接 success)。
-- /health 复核: 40006/4101 全 200; 容器 nv_gw Up 15h, cc4101 Up 15h, nv_gw_stable Up 5d+。
+- 30min nv_gw buffer/wait/keymanager 日志: 无缓冲吸收需要 (全 attempt=1 直接 success)。
+- /health 实测: 40006/4101 全 200; 容器 nv_gw Up 15h, cc4101 Up 15h, nv_gw_stable Up 5d+。
 
 ### 本轮数据
 
 | 指标 | 值 | 状态 |
 |---|---|---|
-| 主 nv_gw(40006) cc4101-primary | **109/109 = 100% SR, 0 bad** | ✅ |
+| 主 nv_gw(40006) cc4101-primary | **110/110 = 100% SR, 0 bad** | ✅ |
 | 主链专属错误 (caller=cc4101-primary) | **0 rows** | ✅ |
 | nv_requests 总 bad (非 200) | 2 条 (zombie_empty_completion 502), 全属 hermes, 主链 0 | ✅(主链) |
-| 30min cc_requests | fallback 0 次 (0.0%), 总 150 全 200 | ✅ |
-| 30min 按模型 SR | dsv4f0731_nv 98.7% (148/150), 2 bad 属 hermes | ✅ |
+| 30min cc_requests | fallback 0 次 (0.0%), 总 110 全 200 | ✅ |
+| 30min 按模型 SR | dsv4f0731_nv 98.6% (142/144), 2 bad 属 hermes | ✅ |
 | nv_tier_attempts (dsv4f0731_nv) | k0-k4 全 pexec_success (23/20/23/22/21), 无 tier 致命错误 | ✅ |
 | buffer | 全 attempt=1 success, 零重试 | ✅ |
 | 容器 | nv_gw Up 15h, cc4101 Up 15h, nv_gw_stable Up 5d+, /health 40006/4101 全 200 | ✅ |
@@ -44,7 +44,7 @@
 - 持续确认 hermes 越界 bad (zombie_empty_completion/502) 与主链 host 分离 (caller JOIN)。
 - 关注偶发 RemoteDisconnected 是否演成持久疲劳 (单 key 连续多轮 100% 失败再考虑 KEY_FID_BIND 换 fid)。
 
-## 参数快照 (2026-08-07, 与上轮 R1054 一致, 未动)
+## 参数快照 (2026-08-07, 与上轮 R1055 一致, 未动)
 - cc4101: PRIMARY_UPSTREAM_URL=http://nv_gw:40006/v1/messages, PRIMARY_UPSTREAM_MODEL=dsv4f0731_nv,
   FALLBACK_UPSTREAM_URL=http://ms_gw:40007/v1/chat/completions, FALLBACK_UPSTREAM_MODEL=glm5_2_ms,
   CC4101_STREAM_TOTAL_DEADLINE_S=470, PRIMARY_HEADER_TIMEOUT=400, CC4101_PRIMARY_FAIL_THRESHOLD=3, CC4101_PRIMARY_SKIP_S=30,
