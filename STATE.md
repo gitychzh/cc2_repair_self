@@ -1,18 +1,18 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: **R1044 (NOP 巡检轮/不改码 — cc2 主链路连续第 152 轮 100% 干净; 主链专属错误 0 rows; fallback 0 次)**
-> cc4101-primary (主 nv_gw:40006) live 复核 30min = **107/107 = 100% SR, 0 bad** (live 查询);
+> 当前轮: **R1045 (NOP 巡检轮/不改码 — cc2 主链路连续第 153 轮 100% 干净; 主链专属错误 0 rows; fallback 0 次)**
+> cc4101-primary (主 nv_gw:40006) live 复核 30min = **106/106 = 100% SR, 0 bad** (live 查询);
 > cc4101-primary 专属错误 = **0 rows** (nv_requests scoped 错误分组为空);
-> nv_requests 总 bad = 3 (zombie_empty_completion×2/NVStream_IncompleteRead×1), 全属 hermes 越界宿主;
-> fallback (cc_requests 30min) = **0 次 / 0.0%** (主链 105/105 全 200);
-> 容器: nv_gw Up 15h, cc4101 Up 14h, dsv4p_nv40066 Up 2d, /health 40006/4101/40066 全 200
-> 上轮: R1043 (NOP, 主链 104/104=100%)
+> nv_requests 总 bad = 4 (zombie_empty_completion×3/NVStream_IncompleteRead×1), 全属 hermes 越界宿主;
+> fallback (cc_requests 30min) = **0 次 / 0.0%** (主链 106/106 全 200);
+> 容器: nv_gw Up 19h, cc4101 Up 14h, dsv4p_nv40066 Up 2d, /health 40006/4101/40066 全 200
+> 上轮: R1044 (NOP, 主链 107/107=100%)
 
-## 本轮 (R1044) 改动 + 依据 + 验证
+## 本轮 (R1045) 改动 + 依据 + 验证
 
-### 改动: 无 (NOP。cc2 主链路连续第 152 轮 100% 干净, 主专属错误 0 rows; 本轮 window 内 3 条 bad 全属 hermes)
+### 改动: 无 (NOP。cc2 主链路连续第 153 轮 100% 干净, 主专属错误 0 rows; 本轮 window 内 4 条 bad 全属 hermes)
 
-### 依据 (live 复核 2026-08-07 18:0x CST + 注入轮前链路分析 18:02 CST)
+### 依据 (live 复核 2026-08-07 18:0x CST + 注入轮前链路分析 18:07 CST)
 
 - 30min cc4101-primary (主 nv_gw:40006) = **107/107 全 200 = 100% SR, 0 bad** (live `SELECT caller,status,count(*) ... WHERE caller='cc4101-primary'`:
   cc4101-primary|200|107)。
