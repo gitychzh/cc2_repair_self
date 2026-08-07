@@ -1,63 +1,58 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: **R1117 (NOP 巡检轮/不改码 — cc2 主链 108/108=100.0% SR 零错误 (cc4101-primary 经 nv_gw, primary model=dsv4f0731_nv); 全量 dsv4f0731_nv 152/153=99.3% SR; 唯一 1× 502 zombie_empty_completion 实时 DB 复核归属 caller=hermes (bad fid 52e1ddb6, k1, dur 2001ms) 非 cc2; fallback 0% (109 total fb=0 全走 primary); per-key 全 pexec_success (fid 281478d0) 仅 fid 52e1ddb6 的 k1 1× + k4 1× RD + k1 1× empty_200 一次性 distributed transient 单请求 buffer 自愈 无 multi-key 连续复发; buffer 全 attempt-1 直flush 3-15s 唯一次 k4 execute_failed attempt-2 5s backoff 自愈 28s 无级联; 容器全 200)**
-> cc4101-primary (主 nv_gw:40006) 实测 30min = **108/108 = 100.0% SR, 0 bad** (cc2 专属零错误)
+> 当前轮: **R1119 (NOP 巡检轮/不改码 — cc2 主链 106/106=100.0% SR 零错误 (cc4101-primary 经 nv_gw, primary model=dsv4f0731_nv); 全量 dsv4f0731_nv 148/148=100.0% SR 零错误 (本窗口全量非-200=空, 较上轮 99.3% 更干净); fallback 0% (148 total fb=0 全走 primary); per-key 全 pexec_success (fid 281478d0) 仅 fid 52e1ddb6 泄漏线的 k1 1× RD + k1 1× empty_200 + k4 1× empty_200 一次性 distributed transient 单请求 tier 自愈 无 multi-key 连续复发; buffer 无重试无级联 attempt-1 direct flush 无 WAIT; 容器全 200)**
+> cc4101-primary (主 nv_gw:40006) 实测 30min = **106/106 = 100.0% SR, 0 bad** (cc2 专属零错误)
 > — **零 502, 零错误(cc2), 零 fallback, 无任何新签名(cc2 范围)**
-> 非-200 归属: 唯一 1 行 **caller=hermes|502|zombie_empty_completion|fid 52e1ddb6|k1|2001ms** — **归属 hermes 非 cc2** (cc4101-primary 无任何非-200)
-> fallback: 0% (109 total, fb=0, 全走 primary)
-> tier 错误: 30min (tier=dsv4f0731_nv) 全 pexec_success 为主 (fid 281478d0), 仅 fid 52e1ddb6 的 k1 1× + k4 1× RD + k1 1× empty_200 一次性 distributed transient 单请求 buffer 自愈, 无 multi-key 连续复发
-> buffer: 全 attempt=1 direct flush 3-15s; 唯一次 req=044cae9d k4 execute_failed attempt-1 → 5s backoff → attempt-2 success 28s 自愈, 无级联无 buffer_exhausted
-> 容器 (/health 2026-08-07 23:3x CST): nv_gw 200 (Up 20h), cc4101 200 (Up 20h)
-> 上轮: R1116 (NOP, 104/104=100% SR 零错误)
+> 非-200 归属: **本窗口全量非-200 = 空** (无 502, 无 zombie_empty_completion)
+> fallback: 0% (148 total, fb=0, 全走 primary)
+> tier 错误: 30min (tier=dsv4f0731_nv) 全 pexec_success 为主 (fid 281478d0), 仅 fid 52e1ddb6 泄漏线的 k1 1× RD + k1 1× empty_200 + k4 1× empty_200 一次性 distributed transient 单请求 tier 自愈, 未上浮为 surface 错误, 无 multi-key 连续复发
+> buffer: 无 buffer/wait/keymanager 日志, 全 attempt-1 direct flush, 无重试无级联无 WAIT
+> 容器 (/health 2026-08-07 23:45 CST): nv_gw 200 (Up 25h), cc4101 200 (Up 20h)
+> 上轮: R1118 (NOP, 105/105=100% SR, 全量 99.3%)
 
-## 本轮 (R1117) 改动 + 依据 + 验证
+## 本轮 (R1119) 改动 + 依据 + 验证
 
-### 改动: 无 (NOP。30min cc2 主链 108/108=100.0% SR 零错误零 fallback。
-### 唯一 502 zombie_empty_completion 实时 DB 复核归属 caller=hermes (bad fid 52e1ddb6, k1, dur 2001ms)
-### 非 cc2; per-key RD/empty_200 (fid 52e1ddb6) 量小 (总 3x, 均单请求) 一次性 distributed transient
-### 单请求 buffer 自愈 未上升, 无 multi-key 连续复发, 非配置漂移; 唯一 k4 execute_failed attempt-2 自愈。
-### cc2 范围无新签名 → 不改码)
+### 改动: 无 (NOP。30min cc2 主链 106/106=100.0% SR 零错误零 fallback。
+### 全量 dsv4f0731_nv 148/148=100% SR 零错误, 本窗口全量非-200=空 (较上轮 99.3% 更干净)。
+### per-key 少量错误 (fid 52e1ddb6) 量小 (总 3x: k1 1× RD + k1 1× empty_200 + k4 1× empty_200)
+### 一次性 distributed transient 单请求 tier 自愈, 未上浮为 surface 错误, 无 multi-key 连续复发,
+### 非配置漂移; buffer 无重试无级联无 WAIT。cc2 范围无新签名 → 不改码)
 
-### 依据 (实时 DB/health 复核 2026-08-07 23:3x CST)
+### 依据 (轮前链路分析注入 2026-08-07 23:44 CST)
 
-- **30min nv_requests (cc4101-primary)**: status 仅 200 × **108** = 100.0% SR, 0 错误
-  (cc2 专属零错误, 连续多轮 R1096-R1117 保持)。
-- **dsv4f0731_nv 全量 SR**: 152/153 = **99.3%**。唯一流失为 502 zombie_empty_completion。
-- **30min 全量非-200 归属 (实时 DB 交叉复核)**: 唯一 1 行 `caller=hermes, fid=52e1ddb6, nv_key_idx=1,
-  status=502, error_type=zombie_empty_completion, duration_ms=2001 → 归属 hermes 非 cc2`
-  (历史记忆模式: zombie_empty_completion/502 归属 hermes/dsv4f0731_nv 线, 越界容器 40666 泄漏线, 宿主分离)。
-  **cc4101-primary 无任何非-200。**
-- **fallback**: 0% (109 total, fallback_triggered=0, 全走 primary)。
-- **nv_tier_attempts 30min**: tier=dsv4f0731_nv, 全 `pexec_success` 为主 (fid 281478d0: k0=22 k1=19 k2=21
-  k3=23 k4=23)；仅 fid **52e1ddb6** (历史记忆坏 fid — 越界容器 40666 hermes 线泄漏源) 的 k1 1× +
-  k4 1× `NVCFPexecRemoteDisconnected` + k1 1× `empty_200` 一次性 distributed transient 单请求 buffer
-  自愈。量 (总 3x) 单请求一次性, 无 multi-key 连续复发。
-- **buffer 日志 (docker logs --since 30m)**: 全 `attempt=1` direct flush
-  (success_tool_call), elapsed 3-15s; 唯一次 req=044cae9d k4 `execute_failed` attempt-1 (elapsed 18s)
-  → 5s backoff → attempt-2 success_tool_call (总 elapsed 28s) 自愈, 无级联无 buffer_exhausted、无 WAIT。
-- **容器 /health 2026-08-07 23:3x CST**: 40006 nv_gw http 200 (Up 20h, primary=dsv4f0731_nv, 5 key),
-  4101 cc4101 http 200 (Up 20h)。nv_gw_stable Up 5d (无关, 历史遗留容器)。
+- **30min nv_requests (cc4101-primary)**: status 仅 200 × **106** = 100.0% SR, 0 错误
+  (cc2 专属零错误, 连续多轮 R1096-R1119 保持)。
+- **dsv4f0731_nv 全量 SR**: 148/148 = **100.0%**。本窗口全量非-200 = 空, 零 bad,
+  较上轮 (151/152=99.3%) 更干净。
+- **30min 全量非-200 归属**: **无** (无 502 / zombie_empty_completion)。cc4101-primary 零错误。
+- **fallback**: 0% (148 total, fallback_triggered=0, 全走 primary)。
+- **nv_tier_attempts 30min**: tier=dsv4f0731_nv, 全 `pexec_success` 为主 (fid 281478d0:
+  k0=22 k1=19 k2=20 k3=21 k4=24)；仅 fid **52e1ddb6** (历史记忆坏 fid — 越界容器 40666 hermes 线
+  泄漏源) 的 k1 1× `NVCFPexecRemoteDisconnected` + k1 1× `empty_200` + k4 1× `empty_200` 一次性
+  distributed transient 单请求 tier 自愈, 未上浮为 surface 错误, 无 multi-key 连续复发, 非配置漂移。
+- **nv_requests 错误分类**: `(无错误)` — 零错误。
+- **buffer 日志 (docker logs --since 30m)**: 无 BUFFER-/WAIT-/keymanager 惩罚日志,
+  全 attempt-1 direct flush, 无重试无级联无 buffer_exhausted 无 WAIT。
+- **容器 /health 2026-08-07 23:45 CST**: 40006 nv_gw http 200 (Up 25h, primary=dsv4f0731_nv, 5 key),
+  4101 cc4101 http 200 (Up 20h)。
 
 ### 本轮数据
 
 | 指标 | 值 | 状态 |
 |---|---|---|
-| cc2 主链 (40006) 30min | cc4101-primary **108/108 = 100.0% SR, 0 bad** | ✅ 全绿 |
+| cc2 主链 (40006) 30min | cc4101-primary **106/106 = 100.0% SR, 0 bad** | ✅ 全绿 |
 | cc2 专属错误分类 | (无错误) 零错误 | ✅ |
-| 非-200 归属 | 唯一 1 行 zombie_empty_completion 归属 **hermes** (fid 52e1ddb6, k1, 2s) 非 cc2 | ✅ |
-| fallback 触发率 | 0% (109 total, fb=0, 全走 primary) | ✅ |
-| per-key tier 错误 | 全 pexec_success (fid 281478d0); 仅 fid 52e1ddb6 的 k1 1× RD + k1 1× empty_200 + k4 1× RD 一次性 transient 单请求自愈, 无 multi-key 连续复发 | ✅ |
-| buffer | 全 attempt=1 direct flush 3-15s; 唯一次 k4 execute_failed 5s backoff attempt-2 自愈 28s, 无级联无 buffer_exhausted | ✅ |
-| container /health | nv_gw 200 (Up 20h), cc4101 200 (Up 20h) | ✅ |
+| 全量非-200 归属 | **空** (无 502 / zombie_empty_completion, 全量 100%) | ✅ 更干净 |
+| fallback 触发率 | 0% (148 total, fb=0, 全走 primary) | ✅ |
+| per-key tier 错误 | 全 pexec_success (fid 281478d0); 仅 fid 52e1ddb6 的 k1 1× RD + k1 1× empty_200 + k4 1× empty_200 一次性 transient 单请求 tier 自愈, 无 multi-key 连续复发 | ✅ |
+| buffer | 无日志 (attempt-1 direct flush), 无重试无级联无 WAIT | ✅ |
+| container /health | nv_gw 200 (Up 25h), cc4101 200 (Up 20h) | ✅ |
 
 ## 下一步
-- 延续 NOP。cc2 主链连续多轮 (R1096-R1117) 100% SR + zero fallback, 无参数可调。
-- **k1/k4 错误** (fid 52e1ddb6): 量小 (总 3x, 均单请求: k1 1× RD + k1 1× empty_200 + k4 1× RD),
-  一次性 distributed transient, 单请求 buffer 自愈, 与历史记忆模式一致 (泄漏源=越界容器 40666 hermes
-  线, 宿主分离)。无 multi-key 连续复发, 不构成配置漂移。仅当 RD/error 在多 key **连续复发** (多个独立
-  请求多 key 持续失败) 才查链路/mihomo 线路。
-- **唯一 502 (bad fid 52e1ddb6 zombie_empty_completion, caller=hermes, dur 2s)**: 非 cc2 范围,
-  历史记忆归属模式, 单请求 transient, 不处置。
-- **k4 execute_failed (req=044cae9d)**: 单次 attempt-1 失败 attempt-2 自愈 (5s backoff, 28s 总),
-  关联 fid 52e1ddb6 泄漏线的 k4 1× RD, 分布式 transient, 非 cc2 性能问题, 不处置。
-- 若 zombie_empty_completion 或其他错误中出现 caller=cc4101-primary (c.parent) 才进 cc2 指标并处置。
+- 延续 NOP。cc2 主链连续多轮 (R1096-R1119) 100% SR + zero fallback, 无参数可调。
+- **k1/k4 错误** (fid 52e1ddb6): 量小 (总 3x, 均单请求: k1 1× RD + k1 1× empty_200 + k4 1× empty_200),
+  一次性 distributed transient, 单请求 tier 自愈, 未上浮为 surface 错误, 与历史记忆模式一致
+  (泄漏源=越界容器 40666 hermes 线, 宿主分离)。仅当 RD/error 在多请求多 key **连续复发** 才查链路/
+  mihomo 线路。
+- **全量非-200=空** (无 502): 最干净窗口。zombie_empty_completion 可持续观察, 若在 caller=hermes
+  线回升且宿主同机再查归属; 出现 caller=cc4101-primary 的错误才进 cc2 指标并处置。
