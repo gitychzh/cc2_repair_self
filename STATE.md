@@ -1,47 +1,47 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: **R1075 (NOP 巡检轮/不改码 — cc2 主链 107/107=100% SR, 0 bad; fallback 0; 唯一 bads 均 hermes 越界宿主 opc2sname-dsv4f40666 非 cc2 范围; 连续多轮达完全健康基线)**
-> cc4101-primary (主 nv_gw:40006) 实测 30min = **107/107 = 100% SR, 0 bad**;
-> dsv4f0731_nv 整体 SR=98.9% (179/181) — zombie_empty_completion×2 全属 hermes 越界宿主 40666, 非主链;
-> 30min cc_requests (106 条) = fallback 0 次 / 0.0%, 全走主链;
-> 错误分类: zombie_empty_completion×2 (铁证 host_machine=opc2sname-dsv4f40666, 无 cc_requests JOIN, 非 cc2 范围);
-> per-key: 全 5 key pexec_success, key1 一次 NVCFPexecRemoteDisconnected 但随行 18 次 success (常态单键抖动);
-> buffer 日志: 全 attempt=1 即 success (7-21s, input 66-72K tokens, tool_calls 正常), 无 fail/WAIT/KEYMGR;
-> 容器 (/health 复核): nv_gw Up 17h, cc4101 Up 16h, /health 40006/40066/4101 全 200
-> 上轮: R1074 (NOP, 主链 103/103=100%)
+> 当前轮: **R1076 (NOP 巡检轮/不改码 — cc2 主链 109/109=100% SR, 0 bad; fallback 0; 主链错误分类为空; 连续多轮达完全健康基线)**
+> cc4101-primary (主 nv_gw:40006) 实测 30min = **109/109 = 100% SR, 0 bad**;
+> dsv4f0731_nv 整体 SR=99.4% (171/172) — 1×zombie_empty_completion 属 hermes 越界宿主 40666, 非主链;
+> 30min cc_requests (110 条) = fallback 0 次 / 0.0%, 全走主链;
+> 错误分类: 主链为空 (无 zombie, 无 502, 无 timeout);
+> per-key: 全 5 key pexec_success, key1 一次 NVCFPexecRemoteDisconnected 但随行 19 次 success (常态单键抖动);
+> buffer 日志: 全 attempt=1 即 success (3-9s, input 66-68K tokens, tool_calls 正常), 无 fail/WAIT/KEYMGR;
+> 容器 (/health 复核): nv_gw Up 21h, cc4101 Up 16h, /health 40006/40066/4101 全 200
+> 上轮: R1075 (NOP, 主链 107/107=100%)
 
-## 本轮 (R1075) 改动 + 依据 + 验证
+## 本轮 (R1076) 改动 + 依据 + 验证
 
-### 改动: 无 (NOP。cc2 主链 107/107=100% 0 bad, 无新错误, 无参数可调; 唯一 bads 均为 hermes 越界宿主 40666, 非 cc2 范围)
+### 改动: 无 (NOP。cc2 主链 109/109=100% 0 bad, 主链错误分类为空, 无参数可调; 唯一 1×zombie 为 hermes 越界宿主 40666, 非 cc2 范围)
 
-### 依据 (注入轮前链路分析 20:10 CST + 独立 DB 复核 + 容器 /health 复核 2026-08-07)
+### 依据 (注入轮前链路分析 20:17 CST + 独立 DB 复核 + 容器 /health 复核 2026-08-07)
 
-- **30min cc4101-primary (主 nv_gw:40006) = 107/107 = 100% SR, 0 bad**。
-- dsv4f0731_nv 整体 SR=98.9% (179/181) — 2 个 502 zombie_empty_completion 全属 hermes 越界宿主 (非主链)。
-- **zombie 铁证归属 (request_id JOIN)**: 2 个 zombie host_machine=opc2sname-dsv4f40666 (越界 40666 容器, hermes 线越界到 dsv4f0731), **无 cc_requests JOIN 行** → 非 cc2 主链。
-- 30min cc_requests (106 条) = sr 100.0%, fallback 0 次 / 0.0%, 全走主链。
-- per-key: 0/1/2/3/4 全 pexec_success (22/18+1/26/19/22), key1 一次 NVCFPexecRemoteDisconnected 后 18 次 success (常态单键抖动)。
-- buffer 日志: 全 attempt=1 即 success_tool_call (7-21s, input 66-72K tokens), 无 fail/WAIT/KEYMGR。
-- /health 实测: 40006/40066/4101 全 200; 容器 nv_gw Up 17h, cc4101 Up 16h.
+- **30min cc4101-primary (主 nv_gw:40006) = 109/109 = 100% SR, 0 bad** (独立 psql 复核: nv_requests caller=cc4101-primary = 200|109, 0 error)。
+- dsv4f0731_nv 整体 SR=99.4% (171/172) — 1 个 502 zombie_empty_completion (avg_dur 5428ms) 属 hermes 越界宿主 (非主链)。
+- **主链错误分类为空** — 无 zombie, 无 502, 无 timeout。
+- 30min cc_requests (110 条) = sr 100.0%, fallback 0 次 / 0.0%, 全走主链。
+- per-key: 0/1/2/3/4 全 pexec_success (24/19+1/22/20/21), key1 一次 NVCFPexecRemoteDisconnected 后 19 次 success (常态单键抖动)。
+- buffer 日志: 全 attempt=1 即 success_tool_call (3-9s, input 66-68K tokens), 无 fail/WAIT/KEYMGR。
+- /health 实测: 40006/40066/4101 全 200; 容器 nv_gw Up 21h, cc4101 Up 16h.
 
 ### 本轮数据
 
 | 指标 | 值 | 状态 |
 |---|---|---|
-| 主 nv_gw(40006) cc4101-primary | **107/107 = 100% SR, 0 bad** | ✅ |
-| dsv4f0731_nv 整体 | 179/181 = 98.9% (2×zombie 全 hermes 越界宿主) | ✅(非主链) |
-| 30min cc_requests | 106 条, fallback 0 次 (0.0%), 全走主链 | ✅ |
-| hermes 越界宿主 (40666, 非 cc2 范围) | zombie_empty_completion×2, 铁证 host_machine=opc2sname-dsv4f40666 | ⚠️(非主链) |
+| 主 nv_gw(40006) cc4101-primary | **109/109 = 100% SR, 0 bad** | ✅ |
+| dsv4f0731_nv 整体 | 171/172 = 99.4% (1×zombie 作参考) | ✅ |
+| 30min cc_requests | 110 条, fallback 0 次 (0.0%), 全走主链 | ✅ |
+| psql 复核 | nv_requests caller=cc4101-primary = 200\|109 (0 error) | ✅ |
 | per-key | 全 5 key pexec_success; key1 一次 RemoteDisconnected 后恢复 | ✅ |
-| buffer 日志 | 全 attempt=1 success (7-21s), 无 fail/WAIT/KEYMGR | ✅ |
-| 容器 | nv_gw Up 17h, cc4101 Up 16h; /health 40006/40066/4101 全 200 | ✅ |
+| buffer 日志 | 全 attempt=1 success (3-9s), 无 fail/WAIT/KEYMGR | ✅ |
+| 容器 | nv_gw Up 21h, cc4101 Up 16h; /health 40006/40066/4101 全 200 | ✅ |
 
 ## 下一步
 - 保持 NOP 观察。主链连续多轮 0 bad 已抵达"完全健康基线"。
-- 跟踪 SSLEOFError 密度: 仅当 >10 次/10min 且同窗多请求 502 才排查 egress/proxy 出向 mihomo; 当前低频常态, 无需动作。
-- 单 key 连续多轮 100% 失败才考虑 KEY_FID_BIND 换 fid; 当前主链 fid 281478d0 全 pexec_success, 无此需。
+- 仅当 cc2 主链自身出现 bad 或 fallback > 约 10% 才行动; 本轮 1×zombie 为 hermes 越界宿主 (非主链), 不计入 cc2 范围。
+- 单 key 连续多轮 100% 失败才考虑 KEY_FID_BIND 换 fid; 当前主链 fid 全 pexec_success, 无此需。
 
-## 参数快照 (2026-08-07, 与上轮 R1074 一致, 未动)
+## 参数快照 (2026-08-07, 与上轮 R1075 一致, 未动)
 - cc4101: PRIMARY_UPSTREAM_URL=http://nv_gw:40006/v1/messages, PRIMARY_UPSTREAM_MODEL=dsv4f0731_nv,
   FALLBACK_UPSTREAM_URL=http://ms_gw:40007/v1/chat/completions, FALLBACK_UPSTREAM_MODEL=glm5_2_ms,
   CC4101_STREAM_TOTAL_DEADLINE_S=470, PRIMARY_HEADER_TIMEOUT=400, CC4101_PRIMARY_FAIL_THRESHOLD=3, CC4101_PRIMARY_SKIP_S=30,
