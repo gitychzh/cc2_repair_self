@@ -1,38 +1,39 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: **R1196 (NOP 巡检 — 活查 30min cc4101-primary 200|104 = 100% SR, 0 非-200;
-> tier 活查 104 全 pexec_success 0 error
-> (连续九轮无瞬时); fallback 0%;
-> buffer 无日志全 attempt-1 direct flush;
-> 整窗全绿跨三十九轮 → NOP 不改码)**
+> 当前轮: **R1197 (NOP 巡检 — 活查 30min cc4101-primary 200|106 = 100% SR, 0 非-200;
+> tier 活查 106 全 pexec_success 0 error
+> (连续十轮无瞬时); fallback 0%;
+> buffer 无退避全 attempt-1 direct flush;
+> 整窗全绿跨四十轮 → NOP 不改码)**
 > 主链 fid: **281478d0-f307** 稳定, dsv4f0731_nv 单模式
 > 错误分类 (活查, 30min): 0 非-200 行
 > 根因: 链上静稳, 全窗 0 错误
-> 最新 30min (~05:45 CST): **cc2-primary 全 200 104/104 = 100% SR, 0 非-200**
+> 最新 30min (~05:54 CST): **cc2-primary 全 200 106/106 = 100% SR, 0 非-200**
 > fallback: **0%**
 
-## 本轮 (R1196) 改动 + 依据 + 验证
+## 本轮 (R1197) 改动 + 依据 + 验证
 
-### 改动: 无 (NOP 巡检轮。cc2 整窗 104/104 全 200, 无改码条件)
+### 改动: 无 (NOP 巡检轮。cc2 整窗 106/106 全 200, 无改码条件)
 
-### 依据 (注入链路分析 2026-08-08 05:45:33 CST + docker logs 活查复核)
+### 依据 (注入链路分析 2026-08-08 05:54:33 CST + docker logs 活查复核)
 
-- **活查 30min cc4101-primary**: `200|104` = 100% SR, 0 非-200 (总时长 11479s)。
+- **活查 30min cc4101-primary**: `200|106` = 100% SR, 0 非-200。
 - **30min 链路总览 (caller × model × status)**: 
-  `cc4101-primary|dsv4f0731_nv|200|104`, `hermes|dsv4f0731_nv|200|62`
-  = 166 req 全 200; 按模型 dsv4f0731_nv SR=100.0% (166/166)。
+  `cc4101-primary|dsv4f0731_nv|200|104`, `hermes|dsv4f0731_nv|200|67`
+  = 171 req 全 200; 按模型 dsv4f0731_nv SR=100.0% (171/171)。
 - **错误分类 (nv_requests)**: `status != 200` → **0 行** (完全无错误)。
-- **tier (nv_tier_attempts)**: per-key 全 `pexec_success` (k0=22,k1=21,k2=20,k3=20,k4=21) = 104,
-  **0 error**。连续第九轮 (R1188→R1196) 完全无瞬时: R1187 的 k0 单次 NVCFPexecTimeout
+- **tier (nv_tier_attempts)**: 活查 106 全 `pexec_success` (k0=22,k1=21,k2=19,k3=21,k4=21),
+  **0 error**。连续第十轮 (R1188→R1197) 完全无瞬时: R1187 的 k0 单次 NVCFPexecTimeout
   持续自愈未复发, 属固定 egress 抖动非回归。无 429 / empty / 新错误类型。
-- **fallback**: 注入 f=166 (总线), 均档; 无实际触发 ms fallback (SR 100%)。
-- **buffer 日志 (docker logs nv_gw --since 30m)**: `(无 buffer/wait/keymanager 日志)`
-  — 全 attempt-1 direct flush 无退避无 WAIT、无 buffer_exhausted。
+- **fallback**: 注入 f=171 (总线), 均档; 无实际触发 ms fallback (SR 100%)。
+- **buffer 日志 (docker logs nv_gw --since 30m)**: 全 attempt-1 direct flush
+  (req 42ddfdd1/202d1e26/36e5c37c/855decc0 等 `NV-BUFFER-SUCCESS` elapsed 2-15s,
+  verdict 均 success_text/success_tool_call), 无退避无 WAIT 无 buffer_exhausted。
 - **容器健康**: nv_gw Up 26h, cc4101 Up 26h, `nv_gw_stable` Up 6 days, /health 均 ok。
 
 ### 验证
-活查 cc4101-primary 104/104 = 100% SR, 0 非-200; tier 活查 104 全 pexec_success 0 error;
-fallback 0%; buffer 无日志 (全 direct flush 无退避无 WAIT);
+活查 cc4101-primary 106/106 = 100% SR, 0 非-200; tier 活查 106 全 pexec_success 0 error;
+fallback 0%; buffer 无退避 (全 direct flush attempt-1);
 nv_gw (Up 26h)/cc4101 (Up 26h)/nv_gw_stable (Up 6 days) health ok; 链路稳定无改码条件。
 
 ## 参数快照 (nv_gw + cc4101, 本轮注入无变更)
@@ -48,12 +49,12 @@ nv_gw (Up 26h)/cc4101 (Up 26h)/nv_gw_stable (Up 6 days) health ok; 链路稳定�
   PRIMARY_SKIP_S=30, UPSTREAM_TIMEOUT=130, UPSTREAM_IDLE_TIMEOUT=150。
 
 ## 上轮
-R1195 (NOP — 活查 101/101 全 200, 0 错误) → R1196 确认:
-活查 104/104 全 200, 0 错误, 链路持续静稳无新事件。
-链路跨三十九轮全绿。
+R1196 (NOP — 活查 104/104 全 200, 0 错误) → R1197 确认:
+活查 106/106 全 200, 0 错误, 链路持续静稳无新事件。
+链路跨四十轮全绿。
 
 ## 下一步
 维持静稳观察。**核心监控: 是否重现独立瞬时 burst 及复发间隔**。
-Burst2 后已持续无任何 cc2 异常, 穿越三十九轮 (R1158→R1196) 整窗全绿。
-k0 偶发 NVCFPexecTimeout 已连续 9 轮 (R1188→R1196) 未复发 (最近一次 R1187),
+Burst2 后已持续无任何 cc2 异常, 穿越四十轮 (R1158→R1197) 整窗全绿。
+k0 偶发 NVCFPexecTimeout 已连续 10 轮 (R1188→R1197) 未复发 (最近一次 R1187),
 继续通过 `ssleof-error-transient-egress-blip` 记忆跟踪, 持续分布才查 mihomo 线路。
