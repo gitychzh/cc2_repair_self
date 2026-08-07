@@ -1,38 +1,34 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: **R1152 (恢复闭环 NOP/不改码 — R1148/49 那场瞬时风暴彻底过境: 65min 全量 cc2 6× 502 逐点匹配
-> 风暴带 17:47-18:02 UTC, 末次失败 18:02:45, 之后 18:03 起连续 92/92 = 100% SR, 最新 5min 18/18;
-> 30min surface 余下 2× 502 (注入时 3× 又 1× 自然滚出) 全落 18:01-18:02 风暴带尾窗; 错误签名与 R1148/49
-> 完全一致, 无新类型; 无配置漂移 → NOP 不改码; R1148/49 风暴彻底过境)**
+> 当前轮: **R1153 (NOP — R1148/49 那场瞬时风暴彻底闭环: 30min 整窗 cc4101-primary 104× 200 = 100% SR,
+> 0 错误, 0 fallback; surface 错误分类完全为空, 原 R1152 记录的尾窗 2× 502 (18:01/18:02 UTC) 已全部滚出
+> 30min 窗口; tier 全 5 key pexec_success 仅 1× 瞬时 NVCFPexecRemoteDisconnected, 429=0 empty=0;
+> buffer 全 attempt-1 direct flush 干净稳态 → NOP 不改码)**
 > 主链 fid: **281478d0-f307** 稳定 (全 5 key pexec), 旧 52e1ddb6 已完全消失
-> 错误分类 (surface, 30min): all_tiers_exhausted × 2 (全 18:01-18:02 UTC 风暴带尾窗)
-> 根因: **R1148 瞬时过境事件的残余尾窗, 已彻底自然滚出**
-> 最新 5min: **cc2-primary 200|18 = 0 非-200, 100% SR**
-> 风暴后连续: **200|92 = 100% SR** (18:03:00 → 18:29)
+> 错误分类 (surface, 30min): **(空)** — 零错误
+> 根因: R1148/49 瞬时风暴, 尾窗已彻底自然滚出, 整窗干净
+> 最新 5min: **cc2-primary 200|104 = 0 非-200, 100% SR**
+> fallback: **0/212 = 0%**, ms_gw 未走
 
-## 本轮 (R1152) 改动 + 依据 + 验证
+## 本轮 (R1153) 改动 + 依据 + 验证
 
-### 改动: 无 (恢复延续 NOP。30min surface 窗口余下 2× 502 全属 R1148/49 风暴带尾窗 (18:01-18:02 UTC),
-### 风暴结束后 92/92 = 100% SR, 最新 5min 18/18。无新错误类型、无配置漂移 → NOP 不改码)
+### 改动: 无 (NOP 巡检轮。30min 整窗 cc4101-primary 104× 200 = 100% SR, surface 错误分类为空,
+### fallback 0%, tier 仅 1× 瞬时 NVCFPexecRemoteDisconnected, buffer 干净 → 不符改动触发条件, 不改码)
 
-### 依据 (live 实查 2026-08-08 02:29 CST)
+### 依据 (live 实查 2026-08-08 02:33 CST)
 
-- **65min cc2 全量失败 (实查)**: 6× 502 时间戳 **17:47 / 17:49 / 17:54 / 17:58 / 18:01 / 18:02 UTC** —
-  与 R1149 记录风暴带 (17:47-18:02) 逐点吻合, 铁证风暴**彻底过境**。末次失败 18:02:45, 之后 23min 零失败。
-- **风暴后 18:03 起 (实查)**: **92/92 = 100% SR, 0 失败** — 较 R1151 的 74 又延伸, 彻底闭环延续。
-- **最新 5min (实查)**: 18/18 = **100% SR**。
-- **30min surface**: 注入时计 3×, 实查已 2× (18:01 / 18:02, 第 3× 已自然滚出) — 全在风暴带尾窗。
-- **错误分类 (surface)**: `all_tiers_exhausted` × 2 — 与 R1148/49 同签名, **无新类型**。
-- **Tier 层 (实查)**: 主链 dsv4f0731_nv 全 5 key → **281478d0-f307**, 91× `pexec_success`; 错误仅
-  `NVCFPexecRemoteDisconnected` × 1, **429=0, empty200=0** → 非 key-cooldown/非空响应根因。
-- **nv_gw 日志 (实查)**: 全 `attempt=1/5 → success → direct flush`, 干净稳态, 无 WAIT/DEGRADED/exhaust。
-- **fallback**: f|192, ms_gw 未走。✅
-- **容器**: nv_gw 40006 ok (28h), dsv4p_nv40066 40066 ok (3d), cc4101 4101 ok (23h), 全稳定未重启。
+- **cc4101-primary per-status (实查)**: `200|104` — **100% SR, 0 非-200**。
+- **错误分类 (实查)**: `(0 rows)` — surface 错误**完全为空**, R1152 记录的尾窗 2× 502 已全滚出。
+- **全模型 SR (注入)**: dsv4f0731_nv **100%** (212/212, 含 hermes 线)。
+- **fallback (注入)**: `f|212 = 0%` — ms_gw 未走。
+- **Tier 层 (注入)**: 全 5 key `pexec_success` (k0:22, k1:20, k2:20, k3:22, k4:18);
+  仅 `NVCFPexecRemoteDisconnected` × 1 → 瞬时 egress 抖动, NOP 自愈; **429=0, empty=0**。
+- **buffer/wait (注入)**: 无日志 — 全 attempt-1 direct flush, 干净稳态。
+- **容器 (实查)**: nv_gw 40006 `ok`, cc4101 4101 `ok`, 全稳定未重启。
 
 ### 验证
-65min 全量 502 逐点匹配风暴带; 风暴后连续 92× 200 = 100% SR; 最新 5min 18/18; buffer 全 attempt-1
-direct flush; tier 无 429/empty; fid 稳定; 容器全稳定。下轮 2× 502 (18:01/18:02) 滚出 30min 窗口后
-整窗 SR 应稳回 100% → R1148/49 风暴彻底闭环。
+30min 整窗 104× 200 = 100% SR; surface 错误分类空; fallback 0%; tier 无 429/empty; fid 稳定;
+容器全健康。R1152 预期的"尾窗滚出后整窗稳回 100%"已如期兑现 → **R1148/49 风暴正式彻底闭环**。
 
 ## 参数快照 (nv_gw + cc4101, 注入)
 
@@ -47,9 +43,16 @@ direct flush; tier 无 429/empty; fid 稳定; 容器全稳定。下轮 2× 502 (
   PRIMARY_SKIP_S=30, UPSTREAM_TIMEOUT=130, UPSTREAM_IDLE_TIMEOUT=150。
 
 ## 上轮
-R1151 (恢复延续 NOP — 风暴带尾窗基本滚出, 窗口内 3×, 风暴后 74/74=100% SR)。
-R1152 确认尾窗再滚出 1× (窗口内剩 2×), 65min 全量 502 逐点匹配风暴带, 风暴后 streak 延伸至 92/92 → 彻底过境。
+R1152 (恢复闭环 NOP — 尾窗 2× 502 @ 18:01/18:02, 风暴后 92/92=100% SR, 65min 全量逐点匹配风暴带)。
+R1153 确认整窗 104/104=100% SR, surface 错误分类空 → 尾窗彻底滚出, R1148/49 风暴正式闭环。
 
 ## 下一步
-维持静稳观察。下轮 2× 502 (18:01/18:02) 将全部滚出 30min 窗口, 整窗 SR 应稳回 100%。
-若再出现全 5 key 连败或新错误类型, 再深挖 egress 线路 (mihomo) / KeyManager cooldown。
+维持静稳观察。保持 NOP。若再出现全 5 key 连败或新错误类型, 再深挖 egress 线路 (mihomo)
+/ KeyManager cooldown / fid 健康。
+
+## R1148→R1153 全时段事务闭环记录 (供审计)
+- R1148 风暴起 (17:47-18:02 UTC), 峰值多 key RemoteDisconnected/all_tiers_exhausted。
+- R1149-1150 恢复期, 尾窗逐步滚出, 降级带后连续 200。
+- R1151 尾窗基本滚出 (剩 3×)。
+- R1152 尾窗剩 2× (18:01/18:02), 风暴后 streak 92/92。
+- **R1153 尾窗全滚出, surface 错误分类空, 整窗 104/104=100% SR → 彻底闭环。**
