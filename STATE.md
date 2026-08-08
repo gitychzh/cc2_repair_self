@@ -1,61 +1,57 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: **R1226 (NOP — SR 100%, 0 错误, fallback 0%, 连续第 6 轮全绿洁净)**
+> 当前轮: **R1228 (semi-NOP 观察轮 — 2 真实 502 buffer_exhausted, 共享 NVCF jitter, 不改码)**
 > 主链 fid: **281478d0-f307** 稳定, dsv4f0731_nv 单模式 (active 流量)
-> 错误分类 (轮前注入 30min + 自查询, 09:20 CST): 请求级 0 错误; 仅 1 次 hermes 线瞬时
-> NVCFPexecRemoteDisconnected (request 12c5d63d, 最终 200 self-heal, 非 cc2)
-> 根因: 无新根因; cc2 专属 100/100, k3 SSLEOFError 持续不复发 (连续 6+ 轮), buffer 全 attempt=1 success
-> 最新窗口: 30min cc2-primary 200|100, fallback 0%, 全量 dsv4f0731_nv SR 100%
+> 失败 (30min cc4101-primary): `200|57 + 502|2` → SR=96.6% (57/59)。
+> 根因: 共享 NVCF 上游瞬时连接抖动 (`Remote end closed connection without response`,
+> 每 attempt 换 key k2→k3→k4 弥散) + 同窗口 hermes 也 502 (22:42/22:46 双 caller 同挂,
+> 证 NVCF-side 非 cc2 路由)。无单一差 egress IP (全≥99.6%) / 无差 key (5key 全健康)。
+> ms_gw fallback 同步失败才触底。最新 15min 已 100% self-heal。
 > 容器: nv_gw /health ok (5 keys + dsv4f0731_nv fid 281478d0-f307), cc4101 ok
 
-## 本轮 (R1226) 改动 + 依据 + 验证
+## 本轮 (R1228) 改动 + 依据 + 验证
 
-### 改动: 无 (NOP 巡检轮。SR 100% + 0 请求级错误 + 全 attempt=1 success + fallback 0%, 不改码)
+### 改动: 无 (semi-NOP 观察轮)。SR 96.6% 未达 NOP 门槛, 但根因=共享 NVCF-side 弥散瞬态,
+### 无 mihomo 单线/配置杠杆可改 (全 egress IP/key 健康), 贸然改线反增回归 (R1077)。如实记录, 下轮观察。
 
-### 依据 (自查询, 2026-08-08 09:20 CST)
+### 依据 (自查询, 2026-08-08 01:40 UTC)
 
-- **30min cc2-primary (nv_requests, caller=cc4101-primary)**: `200|100` → SR=**100% (100/100)**,
-  无 502/4xx。请求级 0 错误。
-- **30min 错误分类 (cc4101-primary status!=200)**: 空 (0 rows) → 无 buffer_exhausted /
-  stream_total_deadline / 其他。
-- **tier 错误 (nv_tier_attempts)**: `NVCFPexecRemoteDisconnected|1` — 仅 1 次 (request 12c5d63d,
-  nv_key_idx=1, hermes caller, fid 281478d0)。**request_id JOIN → hermes 线非 cc2; request 最终
-  status=200 self-heal 成功**。KeyManager 2 次瞬时惩罚 (k3/k5 penalty=5s transport_err no conn_count)
-  均自愈吸收。瞬时 egress 抖动, 符合 R1077 self-heal 模式, 非 cc2 主链异常。
-- **buffer 日志**: 全 `NV-BUFFER-SUCCESS ... after 1 attempt(s)`, elapsed 7-12s, 0 退回/惩罚/阻塞。
-- **fallback**: 0% (cc4101-primary 全 200)。
-- **k3 SSLEOFError (R1205/R1206)**: 持续不复发 (连续 6+ 轮), self-heal 离散瞬时确认。
-- **mihomo 升级监控触发条件 (R1206/R1207 收紧) 判定**: 无真实新失败 (非上轮 request_id) + SR=100%
-  ≥ 99% → 条件不满足, 延后。触发条件: **后续轮次真实新失败 + SR<99%**。
-- **容器健康**: nv_gw /health ok (5 keys + pexec_models 含 dsv4f0731_nv, fid 281478d0-f307),
-  cc4101 ok。参数无漂移 → 非配置回归。
-- **容器 up**: nv_gw 29h, cc4101 29h, nv_gw_stable 6d。
+- **30min cc2-primary**: `200|57 + 502|2` (buffer_exhausted, 118s/128s, "last verdict: execute_failed")
+  → **SR=96.6% (57/59)**, 2 个真实新 502 (新 request_id)。
+- **失败铁证 (a17ed596 日志)**: 3 attempts 全 `Remote end closed connection without response`
+  (k2→k3→k4, 每 attempt 换 key), 3 连 AKE fail-fast → skip WaitQueue → ms_gw fallback 也失败 → 502。
+- **6h 全量失败跨 caller**: 22:42 hermes 502 + 22:43 cc2 502 / 22:45 cc2 + 22:46 hermes 502 /
+  23:04 + 01:08 + 01:17 cc2 502 (共 5 cc2 + 2 hermes)。**双 caller 同时段失败 = NVCF-side, 非 cc2。**
+- **per-egress-IP 6h**: 195→100% (233), 193→100% (461), 180→99.6% (234/235)。无单一差线。
+- **per-key 6h**: k0~k4 各 230~235 success (98~99%)。无单一坏 key。
+- **最新 15min**: 全 200 (attempt-1/2 self-heal 生效), 窗口滚动后 SR 已回稳。
+- **容器**: nv_gw /health ok, cc4101 ok, 参数无漂移 → 非配置回归。
 
 ### 验证
-自查询 30min cc2-primary 100/100 (0 错误), fallback 0%, buffer 全 attempt=1 success。
-唯一 RemoteDisconnected 归属 hermes 且最终 200 self-heal。容器 health ok、参数无漂移。→ 无改码条件, NOP。
+无改动, 无 restart。最新 15min 100% self-heal 证实链路已自动恢复。容器 health ok。
 
-## 参数快照 (nv_gw + cc4101, 与 R1225 一致)
+## 参数快照 (nv_gw + cc4101, 与 R1225-R1227 一致)
 
 - **nv_gw**: UPSTREAM_TIMEOUT=90, TIER_TIMEOUT_BUDGET_S=180, NVU_BUFFER_MAX_RETRIES=5
   (stairs 90×5=450s), NVU_DISABLE_MS_FALLBACK=0, NVU_FORCE_STREAM_UPGRADE=0,
   KEY_COOLDOWN_S=30, INTEGRATE_KEY_COOLDOWN_S=90, TIER_COOLDOWN_S=180, MIN_OUTBOUND_INTERVAL_S=10,
   NVU_BUFFER_CALLERS=cc4101-primary,openclaw2, NV_INTEGRATE_KEY_COOLDOWN_S=90,
   NVU_FORCE_STREAM_UPGRADE_TIMEOUT=150, NVU_CALLER_KEY_MAP=hermes:2;openclaw:3;opencode:4,
-  NVU_PEER_FB_SKIP_MODELS=glm5_2_nv,dsv4p_nv (全 key bind fid index 0=281478d0-f307, dsv4f0731_nv 单模式)。
+  NVU_PEER_FB_SKIP_MODELS=glm5_2_nv,dsv4p_nv (5 key 全 bind fid 281478d0-f307, dsv4f0731_nv 单模式)。
 - **cc4101**: PRIMARY_UPSTREAM_MODEL=dsv4f0731_nv, PRIMARY_UPSTREAM_URL=http://nv_gw:40006/v1/messages,
   FALLBACK_UPSTREAM_MODEL=glm5_2_ms, FALLBACK_UPSTREAM_URL=http://ms_gw:40007/v1/chat/completions,
   CC4101_STREAM_TOTAL_DEADLINE_S=470, PRIMARY_HEADER_TIMEOUT=400, PRIMARY_FAIL_THRESHOLD=3,
   PRIMARY_SKIP_S=30, UPSTREAM_TIMEOUT=130, UPSTREAM_IDLE_TIMEOUT=150。
 
 ## 上轮
-R1225 (NOP — SR 100%, 0 错误, fallback 0%, 连续第 5 轮全绿) → R1226: 维持 SR 100%, fallback 0%。
-cc2-primary 100 (较 R1225 的 96 微升), 全绿的正常流量波动。k3 SSLEOFError 持续不复发 (连续 6 轮)。
-唯一 hermes 线瞬时 RemoteDisconnected (12c5d63d) 最终 200 self-heal, 非 cc2 主链异常。
+R1227 (NOP — SR 100%, 0 错误) → R1228: 出现 2 真实 502 buffer_exhausted (shared NVCF jitter spike,
+跨 caller 相关, 弥散跨 key/IP), 最新 15min 已 self-heal。技术触发 mihomo 排查条件但无单线恶化,
+判 NVCF-side 瞬态, 不改码观察。
 
 ## 下一步
-维持静稳观察。**mihomo 升级监控触发条件 (R1206/R1207 收紧)**: 若 **后续轮次出现真实新失败
-(非上轮 request_id) + SR<99%** → 拉 mihomo 隧道线路质量 (各 egress_ip 失败率、隧道状态、
-带宽/超时)、逐关键链路排查并小步优化。持续观察 k3 SSLEOFError 不复发 (已被连续 6+ 轮确认
-self-heal 离散瞬时); 若连续复发 → 查 k3 mihomo 7896 线路。hermes 线 RemoteDisconnected 归属
-hermes, 非 cc2 范围 (request_id JOIN 判归属)。
+1. **维持观察不改码**。下轮看 30min 是否仍含真实 502 → 连续 >1 轮 + 集中单条 egress IP/key
+   再拉 mihomo 隧道逐线排查。
+2. **关注 ms_gw fallback**: 本轮 2 次 buffer_exhausted ms_gw 同步失败 (双败)。若持续在同
+   NVCF 抖动窗口 ms_gw 也不通, 需评估 ms_gw 状态 (恢复启用中, 非本轮改动)。
+3. **跟踪 `Remote end closed connection without response` 频率**: 弥散瞬态自愈 ok; 若转持续
+   多 key 连续失败 (AKE fail-fast 频繁), 深入 NVCF 侧 (fid 健康/pos 备用) 排查。
