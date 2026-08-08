@@ -1,43 +1,41 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: **R1237 (NOP 巡检轮 — 全 caller dsv4f0731_nv SR=100% (117/117), cc2-primary 100% (80/80), 30min 零错误, 连 3 窗全绿, 不改码)**
+> 当前轮: **R1238 (NOP 巡检轮 — cc2-primary 100% (52/52), 0 失败; 唯一失败聚类 = hermes 线 all_tiers_exhausted × 2 (~180s, out-of-scope), 不改码)**
 > 主链 fid: **281478d0-f307** 稳定, dsv4f0731_nv 单模式 (active 流量)
-> 全 caller (30min): `200|117` → SR=100% (117/117), **本轮 0 错误**。
-> **cc4101-primary (cc2 主链) = 200|80 → SR=100%, 本轮 0 失败**。
-> 本轮全 caller 0 error (无 502/IncompleteRead/buffer_exhausted)。**连 3 窗 (R1235/R1236/R1237)
-> 全绿 0 错误**, hermes 线 NVStream_IncompleteRead 收敛稳定, NVCF-side transient 完全自愈。
-> per-key k0~k4 全 pexec_success 主导 (15~17), k1/k2/k4 各 1 条 NVCFPexecRemoteDisconnected + k1
-> 1 条 NVCFPexecTimeout + 1 条 529_nv_overloaded, 均 transient attempt 换 key 自愈。
-> fallback 0% (0/81)。无 buffer_exhausted 归属 cc2, 无 deadline, 无任何失败聚类。
+> 全 caller (30min): `200|76`+`502|1` → dsv4f0731_nv SR=98.7% (76/77)。
+> **cc4101-primary (cc2 主链) = 200|52 → SR=100%, 本轮 0 失败**。
+> 连多窗 cc2-primary 100% 健康延续。唯一失败聚类 all_tiers_exhausted×2 (~180s/条) 归属
+> **hermes 单 caller** (同刻 5key 瞬挂, RemoteDisconnected/Timeout spread), 而 cc2 同窗 52 次全成功 —
+> 非共享 NVCF jitter, out-of-scope, NOP 自愈即可。
+> per-key k0~k4 全 bind fid 281478d0-f307, 45min 分布正常 (k0:18/k1:17/k2:17/k3:17/k4:22),
+> tier transient 全属 hermes 请求, cc2 请求无 tier error。
+> fallback 0%。buffer 正常 (1 条 cc2 attempt-2 5s backoff 自愈, 无 exhausted)。
 > 容器 health ok (nv_gw 5 keys, cc4101 primary=dsv4f0731_nv)。
 
-## 本轮 (R1237) 改动 + 依据 + 验证
+## 本轮 (R1238) 改动 + 依据 + 验证
 
-### 改动: 无 (NOP)。cc2-primary SR=100% (80/80), 全 caller 0 错误 (117/117),
-### 连 3 窗全绿, 无杠杆可改, 如实记录下轮观察。
+### 改动: 无 (NOP)。cc2-primary SR=100% (52/52), 0 失败; 唯一失败聚类 = hermes 线
+### all_tiers_exhausted (out-of-scope), 无杠杆可改, 如实记录下轮观察。
 
-### 依据 (注入分析, 2026-08-08 10:38 CST / 02:38 UTC)
+### 依据 (注入分析, 2026-08-08 11:34 CST / 03:34 UTC + DB 复核)
 
-- **30min 全 caller**: cc4101-primary `200|80`, hermes `200|37` → **dsv4f0731_nv SR=100% (117/117)**,
-  **本轮零错误** (无 502/IncompleteRead/buffer_exhausted)。
-- **cc4101-primary (cc2 主链) = 200|80 → SR=100%, 本轮 0 失败**。
-- **hermes 线收敛稳定**: R1235/R1236 已确认 hermes 线 NVStream_IncompleteRead 收敛, 本轮 R1237
-  继续全 caller 0 错误 — **连 3 窗全绿**。memory
-  `primary-model-dsv4f0731-r1095`: zombie/IncompleteRead 类多属 hermes 线非 cc2; `nvcf-shared-jitter`:
-  single-caller isolated transient, NOP 自愈即可, 约 3 窗周期收敛。
-- **错误分类 30min**: (无错误), 0 条 status!=200。
-- **per-key 30min**: k0~k4 全 pexec_success 主导 (k0:16/k1:15/k2:16/k3:17/k4:15), k1/k2/k4 各 1 条
-  NVCFPexecRemoteDisconnected, k1 另有 1 条 NVCFPexecTimeout + 1 条 529_nv_overloaded
-  (均 transient, attempt 换 key 自愈)。无 single-key-stuck, 无单线杠杆, transient 弥散正常。
-- **fallback**: 0/81 = 0.0% (30min cc_requests, fallback_triggered=0) — cc2 主链 80/80 全直连
-  NVCF, 无 NVCF jitter, 无 fallback 触发。
-- **buffer/wait 日志**: 30min 无 buffer/wait/keymanager 日志, 全 attempt-1 success, 无 retry
-  无 WAIT, 无 buffer_exhausted 归属 cc2。
-- **容器**: nv_gw Up 31h /health ok (5 keys + dsv4f0731_nv), cc4101 Up 31h ok (primary=dsv4f0731_nv)。
+- **30min 全 caller**: cc4101-primary `200|52`, hermes `200|24`+`502|1` → **dsv4f0731_nv SR=98.7% (76/77)**。
+- **cc4101-primary (cc2 主链) = 200|52 → SR=100%, 本轮 0 失败** (DB 复核 cc4101-primary status!=200 → 0 rows)。
+- **错误分类 30min**: `all_tiers_exhausted × 1` (duration_ms=180029), DB 复核归属 **caller=hermes**,
+  request_id=1a6a4b35 (45min 窗另有 hermes 937fe7b2, 同画像 ~179s)。**非 cc2 主链, out-of-scope**。
+- **tier attempts 30min**: pexec_success 主导。NVCFPexecRemoteDisconnected + NVCFPexecTimeout 弥散跨 key,
+  每条归属**独立 hermes 请求** (4847d338/75882c89/b8a770e4/c7e78710 单条 transient),
+  hermes 线 937fe7b2 = 3×RemoteDisconnected+1×Timeout → hermes 单 caller 5key 瞬挂。**cc2 请求无任何 tier error**。
+- **per-key 45min fid 分布**: k0:18/k1:17/k2:17/k3:17/k4:22 全 bind 281478d0-f307 (正确单模式 fid), 分布正常。
+  无 single-key-stuck, 无单线杠杆。
+- **fallback**: 0% (cc_requests 全 fallback_triggered=f) — cc2 主链 52/52 全直连 NVCF。
+- **buffer/wait 日志**: 正常 — 1 条 cc4101-primary 请求 attempt-2 5s backoff 后自愈 (50s, 无 exhausted),
+  其余全 attempt-1 success。keymanager 无 clip/429 累积。
+- **容器**: nv_gw /health ok (5 keys + dsv4f0731_nv), cc4101 /health ok (primary=dsv4f0731_nv)。
 
 ### 验证
-无改动, 无 restart。cc2-primary 100%, 全 caller 0 错误, fallback 0%, 5 key 健康, hermes 线
-transient 收敛稳定 (连 3 窗全绿)。容器 health ok。
+无改动, 无 restart。cc2-primary 100% (52/52), 唯一失败聚类 hermes all_tiers_exhausted (out-of-scope),
+非共享 NVCF jitter (cc2 同窗 52 次全成功), fallback 0%, 5 key 健康, buffer 正常。容器 health ok。
 
 ## 参数快照 (nv_gw + cc4101, 与 R1234/R1235/R1236 一致, 无漂移)
 
@@ -59,12 +57,15 @@ cc2-primary 100% (72/72)) → R1234 (SR 99.2%, 唯一 502 = hermes 线 NVStream_
 (连 3 窗同画像 diff request, 不聚类), cc2-primary 100% (76/76)) → R1235 (**SR 100% (116/116),
 全 caller 0 错误, hermes 线 IncompleteRead 收敛, cc2-primary 100% (73/73)**) → R1236
 (**SR 100% (116/116), 连 2 窗全绿 0 错误, cc2-primary 100% (74/74), 0 失败**) → R1237
-(**SR 100% (117/117), 连 3 窗全绿 0 错误, cc2-primary 100% (80/80), 0 失败, fallback 0%**)。
-NVCF-side 弥散 transient 完全收敛, 5key/IP 全健康, 无单线/配置杠杆, 连 3 窗 NOP。
+(**SR 100% (117/117), 连 3 窗全绿 0 错误, cc2-primary 100% (80/80), 0 失败, fallback 0%**) →
+R1238 (**cc2-primary 100% (52/52), 0 失败; 全 caller SR=98.7% 因 hermes 线 all_tiers_exhausted×2
+单独判, 非共享 jitter, out-of-scope NOP 自愈**)。
+NVCF-side 弥散 transient 持续收敛, 5key/IP 全健康, 无 c2 失败聚类, 连 4 窗 cc2-primary NOP。
 
 ## 下一步
-1. **维持观察不改码**。cc2 主链 100%, 全 caller 0 错误 (连 3 窗), 无失败聚类, 无 mihomo 逐线
+1. **维持观察不改码**。cc2 主链 100% (连 4 窗 R1235-R1238 NOP), 无 cc2 失败聚类, 无 mihomo 逐线
    排查需求 (R1207 门槛未触发)。
-2. **hermes 线收敛稳定** (R1235/R1236/R1237 连 3 窗全绿 0 错误), 持续观察。若跨 caller 同刻 502 聚类
-   (NVCF-side jitter 画像) 或 hermes 线错误连续增长才升级观察。
+2. **hermes 线 all_tiers_exhausted** (本轮 ×2, ~180s): 单 caller 同刻 5key 瞬挂, 非共享 NVCF jitter
+   (cc2 同窗 52 次全成功)。若 hermes all_tiers_exhausted 连续多轮复发且开始跨 caller 同刻失败
+   (共享 jitter 画像), 才升级排查; 否则 NOP 自愈观察。
 3. **ms_gw fallback**: NVU_DISABLE_MS_FALLBACK=0 恢复启用中, 本轮无 NVCF jitter 触发 (fallback 0%), 不动。
