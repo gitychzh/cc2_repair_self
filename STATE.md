@@ -1,36 +1,36 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (HM2)
 
-> 当前轮: **R1229 (semi-NOP 观察轮 — SR 97.1%, 2 真实 502 buffer_exhausted, NVCF-side 弥散瞬态, 不改码)**
+> 当前轮: **R1230 (NOP 巡检轮 — SR 98.75%, 1 边界重采样非新失败, latest 15min 100%, 不改码)**
 > 主链 fid: **281478d0-f307** 稳定, dsv4f0731_nv 单模式 (active 流量)
-> 失败 (30min cc4101-primary): `200|67 + 502|2` → SR=97.1% (67/69)。
-> 根因: 共享 NVCF 上游瞬时连接抖动 (buffer_exhausted, ~118-128s), 与 R1228 同类同 terminal 签名。
-> 差异: R1228 跨 caller 相关 (hermes 同挂), 本轮 hermes 同小时 100% — jitter 簇更窄/更短, 仅 cc2 撞上。
-> 3 失败 request 无 egress_ip 归属 (死在跨 key buffer 内), 全 egress IP/key 健康 (无单线杠杆)。
-> 技术触发 mihomo 排查条件 (SR<99%) 但无单线集中恶化, 判 NVCF-side 瞬态, 不改码观察 (R1077)。
-> 容器: nv_gw /health ok (5 keys + dsv4f0731_nv fid 281478d0-f307), cc4101 ok
+> 失败 (30min cc4101-primary): `200|79 + 502|1` → SR=98.75% (79/80)。
+> 唯一 502 ce5ec111@01:40 (buffer_exhausted, 122s) = **R1229 已记录失败的同 request 边界重采样**,
+> **本轮 0 新 cc2 失败**。latest 15min cc4101-primary = 100% (41/41) self-heal 完好。
+> hermes 线 1 个 NVStream_IncompleteRead (92eb7e97, k2) 非 cc2 主链 caller, 判属 hermes。
+> 无 egress_ip/key 归属 (死在跨 key buffer 内), 全 egress IP/key 健康 (无单线杠杆)。
+> 符 NVCF-side 弥散瞬态画像 (R1077), NOP 不再动线。容器 health ok。
 
-## 本轮 (R1229) 改动 + 依据 + 验证
+## 本轮 (R1230) 改动 + 依据 + 验证
 
-### 改动: 无 (semi-NOP 观察轮)。SR 97.1% 未达 NOP 门槛, 但根因=共享 NVCF-side 弥散瞬态,
-### 无 mihomo 单线/配置杠杆可改 (全 egress IP/key 健康), 贸然改线反增回归 (R1077)。如实记录, 下轮观察。
+### 改动: 无 (NOP)。本轮唯一 cc2 502 是 R1229 已记录的 ce5ec111 边界重采样, 0 新失败,
+### latest 15min 100% self-heal, 无单线/配置杠杆可改, 如实记录下轮观察。
 
-### 依据 (自查询, 2026-08-08 01:45 UTC)
+### 依据 (自查询, 2026-08-08 01:56 UTC)
 
-- **30min cc2-primary**: `200|67 + 502|2` (buffer_exhausted, ~118-128s) → **SR=97.1% (67/69)**,
-  2 个真实新 502 (新 request_id), 与 R1228 同 terminal 签名。
-- **2h 全量失败**: 01:10:13 72e396bb / 01:19:49 a17ed596 / 01:40:06 ce5ec111, 全 buffer_exhausted 118-128s。
-- **跨 caller (同小时)**: cc4101-primary 98 总 3 bad, **hermes 78 总 0 bad** → 与 R1228 跨 caller 相关不同,
-  本轮 jitter 簇更窄/更短, 仅 cc2 单 caller 撞上, NVCF-side 范围收窄。
-- **per-egress-IP 2h**: 193→100% (169), 195→100% (114), 180→100% (113), 197→100% (91)。
-  3 个失败 request **无 egress_ip 归属** (空) → 死在跨 key buffer 内, 未到任何单线。无单一差线。
-- **per-key 2h**: k0~k4 各 62~69 pexec_success, transient (NVCFPexecRemoteDisconnected/Timeout)
-  弥散 k0/k1/k2/k3 (3/1/2/2), 每失败 attempt 已换 key, 无 single-key-stuck。
-- **容器**: nv_gw /health ok, cc4101 ok, 参数无漂移 → 非配置回归。
+- **30min cc2-primary**: `200|79 + 502|1` → **SR=98.75% (79/80)**, 较 R1229 (97.1%) 回升。
+- **唯一 502**: ce5ec111 @01:40 buffer_exhausted 122s, 与 **R1229 STATE 记录的同 request** (R1229
+  窗口同见 01:40:06 ce5ec111), 本轮 = 滚动窗口边界 re-sample 判同一条, **非新 request**。
+  R1229 另两个失败 (72e396bb/a17ed596) 已滚出窗。
+- **latest 15min cc4101-primary**: `200|41` → **100% self-heal**。
+- **hermes**: 92eb7e97 NVStream_IncompleteRead (k2) 38s → hermes 线, 非 cc2 主链 caller。判属 hermes。
+- **per-key 30min**: k0~k4 全 pexec_success (14~16), transient NVCFPexecRemoteDisconnected 弥散
+  k0:2/k1:1/k2:1/k3:1, 每失败已换 key, 无 single-key-stuck。
+- **容器**: nv_gw /health ok (5 keys + dsv4f0731_nv), cc4101 ok, buffer 全 attempt-1 success (10-12s flush)
+  无 retry 无 WAIT → 非配置回归。
 
 ### 验证
-无改动, 无 restart。buffer 内每 attempt 换 key + AKE fail-fast 生效; 最新窗口已 self-heal。容器 health ok。
+无改动, 无 restart。buffer attempt-1 success + 无 buffer_exhausted 复现, latest 15min 100%。容器 health ok。
 
-## 参数快照 (nv_gw + cc4101, 与 R1228 一致, 无漂移)
+## 参数快照 (nv_gw + cc4101, 与 R1229 一致, 无漂移)
 
 - **nv_gw**: UPSTREAM_TIMEOUT=90, TIER_TIMEOUT_BUDGET_S=180, NVU_BUFFER_MAX_RETRIES=5
   (stairs 90×5=450s), NVU_DISABLE_MS_FALLBACK=0, NVU_FORCE_STREAM_UPGRADE=0,
@@ -44,13 +44,13 @@
   PRIMARY_SKIP_S=30, UPSTREAM_TIMEOUT=130, UPSTREAM_IDLE_TIMEOUT=150。
 
 ## 上轮
-R1228 (SR 96.6%, 2 真实 502, 跨 caller 相关) → R1229 (SR 97.1%, 2 真实 502, 仅 cc2 单 caller)。
-两类同为 NVCF-side 弥散瞬时 jitter, 本窗口收窄, 5key/IP 全健康。无单线/配置杠杆, 不改码观察。
+R1229 (SR 97.1%, 2 真实 502 buffer_exhausted, 仅 cc2 单 caller) → R1230 (SR 98.75%,
+唯一 502 为 R1229 边界重采样, 本轮 0 新失败, latest 15min 100%)。
+NVCF-side 弥散瞬时 jitter 收敛, 5key/IP 全健康, 无单线/配置杠杆, NOP。
 
 ## 下一步
-1. **维持观察不改码**。仅当出现 **单条 egress IP/key 集中恶化** (可达 ~1%+ 差线) 或
-   连续 >2 轮 buffer_exhausted 聚类才拉 mihomo 逐线排查。当前未满足, 观察。
-2. **跟踪 buffer_exhausted terminal 频率**: 弥散瞬态 self-heal 一贯有效 (单 req attempt-1/2);
-   若转持续多 key 连续失败 (AKE fail-fast 频繁), 深入 NVCF 侧 (fid 健康/pos 备用) 排查。
-3. **ms_gw fallback**: NVU_DISABLE_MS_FALLBACK=0 恢复启用中。本轮 buffer_exhausted fallback f=116
-   无因 NVCF jitter 触发, 正常。无改动。
+1. **维持观察不改码**。仅出现单条 egress IP/key 集中恶化 (可达 ~1%+ 差线) 或连续 >2 轮
+   新 buffer_exhausted 聚类才拉 mihomo 逐线排查。当前 0 新失败, 观察。
+2. **跟踪 buffer_exhausted**: ce5ec111 已跨 R1229/R1230 两轮 re-sample, 下一轮应滚出。
+   若新 request 且跨多 key 连续失败 (AKE fail-fast 频繁), 深入 NVCF 侧排查。
+3. **ms_gw fallback**: NVU_DISABLE_MS_FALLBACK=0 恢复启用中。本轮无因 NVCF jitter 触发, 不动。
