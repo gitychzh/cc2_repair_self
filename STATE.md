@@ -1,6 +1,6 @@
-# STATE.md — cc2 自优化 nv_gw 链路 (R1256c, 2026-08-13)
+# STATE.md — cc2 自优化 nv_gw 链路 (R1264, 2026-08-15)
 
-## 当前架构 (R1256c, 实测 2026-08-13 校正)
+## 当前架构 (R1264, 实测 2026-08-15 校正)
 
 ```
 你(cc2, claude-opus-5) → cc4101 (127.0.0.1:4101)
@@ -26,36 +26,49 @@ opclaw4103 (port 4103) — 独立 cc-adapter (openclaw 客户端):
   ├─ Fallback:  nv_gw:40006 → glm5_2_nv  (NVCF pexec, NVCF 降级时备用)
   ├─ PRIMARY_HEADER_TIMEOUT=90, FALLBACK_HEADER_TIMEOUT=70
   └─ API keys: NV_GW_API_KEY=ms-gw-token (primary), FALLBACK_API_KEY=nv-gw-token (fallback)
+
+hm4104 (port 4104) — cc-adapter (hermes 客户端):
+  ├─ Primary:   oc45001:45001 → big-pickle (opencode zen 免费模型, 64 IP 轮转池)
+  ├─ Fallback:  dsv4f0731_nv40666:40666 → dsv4f0731_nv (NVCF pexec, R1264 修正)
+  ├─ API keys: NV_GW_API_KEY=oc-proxy-token (primary), FALLBACK_API_KEY=nv-gw-token (fallback)
+  └─ R1263: oc45001 64 端口 IP 轮转 + 6 BUG 修复 (report_ok/status/semaphore/thread-safety)
 ```
 
-## R1256c 本轮改了什么 (opclaw4103 "primary 和 fallback 均不可用" 修复)
+## R1264 本轮改了什么 (hm4104 fallback 修正: ms_gw→dsv4f0731_nv40666)
 
-1. **根因**: opclaw 原 primary=dsv4f0731_nv@40666 (NVCF fid 281478d0) pexec 87% 超时降级;
-   fallback=dsv4f0731_ms@ms_gw 偶发 70s 超时; 双链同时失败致 "均不可用"
-2. **修复**: opclaw primary→ms_gw(40007) glm5_2_ms (OpenAI SSE 原生, 92% SR, TTFB 1-20s);
-   fallback→nv_gw(40006) glm5_2_nv (NVCF pexec, ms_gw 降级时备用)
-3. **API key 调整**: NV_GW_API_KEY=ms-gw-token (primary 用), FALLBACK_API_KEY=nv-gw-token (fallback 用)
-4. **timeout**: PRIMARY_HEADER_TIMEOUT=90, FALLBACK_HEADER_TIMEOUT=70, 90+70=160<170 PROXY_TIMEOUT
+1. **根因**: hm4104 compose 的 FALLBACK_URL 历史残留指向 ms_gw:40007 (model=dsv4f0731_ms),
+   用户要求 fallback 应为 dsv4f0731_nv40666 (model=dsv4f0731_nv, NVCF pexec)
+2. **修复**: docker-compose.yml hm4104 service 3 处编辑:
+   - FALLBACK_URL: ms_gw:40007 → dsv4f0731_nv40666:40666
+   - FALLBACK_MODEL: dsv4f0731_ms → dsv4f0731_nv
+   - 新增 FALLBACK_API_KEY=nv-gw-token (dsv4f0731_nv40666 入站 Bearer)
+3. **应用**: `docker compose up -d hm4104` (env 改动用 up -d 非 restart)
 
-## R1256c 验证
+## R1264 验证
 
-- 流式无 tools: 200 OK ~2s (ms_gw primary 直接成功)
-- 流式 with tools: primary ms_gw 90s 超时 (429 风暴) → fallback nv_gw 成功 (无 "均不可用")
-- 非流式: 200 OK 6.5s
-- opclaw 日志: 无 PRIMARY-FAIL/CIRCUIT-OPEN (ms_gw 稳定时)
+- 容器: hm4104 Up ✅
+- env: FALLBACK_URL=http://dsv4f0731_nv40666:40666/v1, FALLBACK_MODEL=dsv4f0731_nv, FALLBACK_API_KEY=nv-gw-token ✅
+- health: status=ok, primary=oc45001/big-pickle, fallback=dsv4f0731_nv40666/dsv4f0731_nv ✅
+- primary 烟雾测试: POST /v1/chat/completions → 200 OK, model=big-pickle ✅
 
-## R1256b 前轮改了什么 (cc2 修复 HM1 "Server error mid response")
+## R1263 前轮改了什么 (oc45001 64 IP 轮转池 + 6 BUG 修复)
 
-1. HM1 nv_gw/cc4101/ms_gw 源码全量同步 HM2→HM1
-2. HM1 docker-compose.yml env 全面更新 (40 个 R1256 标签)
-3. nv_gw 启动 crash 修复 (format/ 子目录)
+1. hermes 已将 mihomo 64 个 IP 节点 (端口 7910,7914-7915,7918-7978) 加入 oc45001 OZ_PROXY_LIST
+2. DB 验证: 重启后 20+ distinct proxy_idx 分布, IP 轮转生效
+3. 6 BUG 修复 (handlers.py + pacer.py):
+   - BUG 1: report_ok 无条件调用 → 仅 status=200 无 error 时调用 (保护指数退避)
+   - BUG 2: 成功时 status 未设 200 → 在 return 前显式设 status=200
+   - BUG 3: _send_json 不支持 extra_headers → 添加 extra_headers 参数 (Retry-After 排序)
+   - BUG 4: Retry-After 调用点未用 extra_headers → pacer_timeout + all-429 两处修正
+   - BUG 5: _proxy_counter 非线程安全 (全局 int) → 改为 itertools.count (原子自增)
+   - BUG 6: 删除死代码 _proxy_error_body (未使用)
+   - pacer: 信号量过早释放 → acquire 不释放, 新增 release() 在 handler finally 调用
 
 ## 前序
 
-- R1256b: HM1 源码全量同步 + nv_gw crash 修复
-- R1255: config.py 死fid精简 + cc4101 链路切 glm5_2_nv primary + glm5_2_ms fallback
-- R1254: NVU_ACTIVE_TIERS 白名单 (40006=glm5_2_nv, 40666=dsv4f0731_nv, 40066=dsv4p_nv)
-- R1253: KEY_FID_BIND 清空 + func_health 动态切换 + fid_discovery probe 修复
+- R1263: oc45001 64 IP 轮转池 + 6 BUG 修复
+- R1256c: opclaw4103 primary→ms_gw glm5_2_ms, fallback→nv_gw glm5_2_nv
+- R1255: cc4101 链路切 glm5_2_nv primary + glm5_2_ms fallback
 
 ## 关键 deadline 层级
 
@@ -78,16 +91,8 @@ opclaw4103 (port 4103) — 独立 cc-adapter (openclaw 客户端):
 | `b1b22d03` | ❌ INACTIVE | 同上, 已删 |
 | `5532e90c` | ❌ INACTIVE | 同上, 已删 |
 
-## HM1 状态 (R1256b 后)
-
-- HM1 nv_gw/cc4101/ms_gw 源码已与 HM2 对齐 (2026-08-13)
-- HM1 docker-compose env 已补齐 (40 个 R1256 标签)
-- HM1 备份: /tmp/hm1_{nv_gw,cc4101,ms_gw}_backup_R1256/
-- HM1 SSH: `ssh -p 222 opc_uname@100.109.153.83`
-- HM1 特有配置保留: mihomo 5端口(7894/5/6/7/9, 无7901), 独立 US IPs, host.docker.internal proxy
-
 ## 下一步
 
-- 等 HM1 cc 产生新流量, 观察 30min 窗口 SR + "Server error mid response" 是否消失
-- HM2 本地下窗口 NOP 巡检 (R1255 链路 glm5_2_nv primary + glm5_2_ms fallback)
-- 关注 3b9748d8 429 是否持续, 若持续考虑只保留 bfcf495b 单 fid
+- 观察 hm4104 fallback 触发率 (目标 < 5%, oc45001 SR 99%+ 时极少触发)
+- 如 fallback 实际触发, 验证 dsv4f0731_nv40666 端到端 200 OK
+- HM2 本地下窗口 NOP 巡检 (cc4101 链路 glm5_2_nv primary)
