@@ -1,6 +1,31 @@
-# STATE.md — cc2 自优化 nv_gw 链路 (R1266, 2026-08-15)
+# STATE.md — cc2 自优化 nv_gw 链路 (R1256b, 2026-08-13)
 
-## 当前架构 (R1266, 实测 2026-08-15 校正)
+## R2423 本轮 (2026-08-15, 诊断分析轮 NOP)
+
+### 本轮做了什么
+用户要求深挖 40666 dsv4f0731_nv empty_200 问题. 全面诊断:
+- **结论**: empty_200 = NVCF 后端时段性波动 (返回 200 + Content-Length:0 空响应), **非输入太大/非代码逻辑/非请求频率/非 key/非 IP 问题**
+- empty_200 成簇出现在 18:43-19:37 CST 时段 (25 次/12h), 之后逐渐恢复
+- 所有 5 key + 5 US IP 都均匀受影响 — NVCF 整体波动而非单线
+- 无更优 FID: 281478d0-f307-49f4-9e0f-080b63b16c47 是唯一 ACTIVE deepseek-v4-flash-0731
+- 代码逻辑正确: _check_empty_200() 准确识别 NVCF 空响应
+
+### 发现的优化空间 (未实施)
+- empty_200 触发 mark_429 cooldown=120s (mark_key_cooling 是 mark_429 wrapper) — 语义不精确, empty_200 非 rate limit
+- empty_200 后下一个 key 6-15s 内成功, 120s 冷却偏重
+- 可选优化: empty_200 独立 cooldown (30-60s) 或在 mark_key_cooling 增加自定义 duration
+
+### 验证
+- 直连 pexec 15 次: 14×200 OK + 1×529, 0 empty_200 (当前时段健康)
+- Gateway 非/流测试均 200 OK ✅
+- 三容器 SR: nv_gw 99.8% | dsv4f0731_nv 71.1% | dsv4p_nv 0% (全挂)
+
+### 下一步
+- 等 NVCF 下次波动观察 empty_200 模式
+- 若用户同意, 可优化 empty_200 cooldown 策略
+
+
+## 当前架构 (R1256b, 实测 2026-08-13 校正)
 
 ```
 你(cc2, claude-opus-5) → cc4101 (127.0.0.1:4101)
@@ -20,95 +45,34 @@ nv_gw (40006) — glm5_2_nv pexec_us_rr,integrate_us_rr (5 key, 2 ACTIVE fid 候
   ▼
 ms_gw (40007) — glm5_2_ms (ModelScope 中国, 7 key, 10 variant):
   └─ DEFAULT_MODEL=glm5_2_ms, 同模型跨供应商真备用
-
-opclaw4103 (port 4103) — 独立 cc-adapter (openclaw 客户端):
-  ├─ Primary:   oc45001:45001 → big-pickle (opencode zen 免费模型, 29 IP 轮转池, MAX_CONCURRENCY=3)
-  ├─ Fallback:  dsv4f0731_nv40666:40666 → dsv4f0731_nv (NVCF pexec, R1265 修正)
-  ├─ PRIMARY_HEADER_TIMEOUT=60, FALLBACK_HEADER_TIMEOUT=100 (R1266 修复)
-  └─ API keys: NV_GW_API_KEY=oc-proxy-token (primary), FALLBACK_API_KEY=nv-gw-token (fallback)
-
-hm4104 (port 4104) — cc-adapter (hermes 客户端):
-  ├─ Primary:   oc45001:45001 → big-pickle (opencode zen 免费模型, 29 IP 轮转池)
-  ├─ Fallback:  dsv4f0731_nv40666:40666 → dsv4f0731_nv (NVCF pexec, R1264 修正)
-  ├─ API keys: NV_GW_API_KEY=oc-proxy-token (primary), FALLBACK_API_KEY=nv-gw-token (fallback)
-  └─ R1266: FALLBACK_HEADER_TIMEOUT 70→100, oc45001 MAX_CONCURRENCY=3
 ```
 
-## R1266 本轮改了什么 (openclaw "均不可用" 根因修复)
+## R1256b 本轮改了什么 (cc2 修复 HM1 "Server error mid response")
 
-1. **根因**: oc45001 `MAX_CONCURRENCY=1` → 3 caller (opclaw4103/hm4104/oc4105) 争 1 slot
-   → 2/3 得 429 pacer_queue_timeout → 触发 fallback → FALLBACK_HEADER_TIMEOUT=70s 太短
-   (dsv4f0731 NVCF pexec 需 90-120s) → fallback 也 timeout → "primary 和 fallback 均不可用"
-2. **Fix 1: oc45001 pacer 放宽**: MAX_CONCURRENCY 1→3, QUEUE_TIMEOUT_S 10→30, MIN_INTERVAL_S 8→5
-3. **Fix 2: opclaw4103 timeout**: PRIMARY_HEADER_TIMEOUT 90→60, FALLBACK_HEADER_TIMEOUT 70→100
-4. **Fix 3: hm4104+oc4105 同步**: FALLBACK_HEADER_TIMEOUT 70→100
-5. **文件**: oc-proxy/docker-compose.yml, docker-compose.yml
-6. **应用**: up -d oc45001 opclaw4103 hm4104 oc4105 (env 改动)
+1. **HM1 nv_gw 源码全量同步** HM2→HM1: 5 新文件 (buffer_stream/key_manager/probe_worker/fid_discovery/stream_success_judge) + 8 过时覆写 + 3 文件 format/ 子目录创建
+2. **HM1 cc4101 源码全量同步** HM2→HM1: 3 新文件 (routing/http_client/timeout_strategy) + 6 过时覆写
+3. **HM1 ms_gw 源码同步**: handlers.py (加 /v1/messages 端点), upstream.py, config.py
+4. **HM1 docker-compose.yml env 全面更新**: 40 个 R1256 标签, 含 BUFFER/KEYMGR/WAIT_QUEUE/MS_FALLBACK 全部新增, proxy URLs 全转 socks5h://
+5. **nv_gw 启动 crash 修复**: 首次 up 后 ModuleNotFoundError 'gateway.format' → 创建 format/ 目录并传输 3 个 .py 文件 → restart 后 healthy
 
-## R1266 验证
+## R1256b 验证
 
-- 容器: oc45001 Up healthy ✅, opclaw4103/hm4104/oc4105 Up ✅
-- 并发测试 (修复前→修复后): 3 并发 oc45001: 1×200+2×429 → 3×200 ✅
-- 并发测试 opclaw4103: 3 并发 → 3×200 (4.9s/13.6s/18.9s) ✅
-- 日志: opclaw4103 无 PRIMARY-FAIL/FALLBACK-FAIL/"均不可用" ✅
-- timeout 验证: 60+100=160 < 170 PROXY_TIMEOUT < 180 openclaw timeout ✅
+- 端到端 3/3 200 OK via primary glm5_2_nv (12-69s)
+- DB: nv_requests 5min 3×200, per-key k0/k1/k2/k4 多 key 轮转 + 2 fid (3b9748d8+bfcf495b) + integrate
+- 三容器全 Up healthy: nv_gw, cc4101, ms_gw
+- FID discovery 启动: 182 functions, 2 ACTIVE glm-5.2 candidates, bfcf495b probe OK
+- 修复前 30min 窗口: SR 63.8% (zombie_empty_completion 67, upstream_error 37) — 全部来自修复前旧数据
 
-## R1258 前轮改了什么 (pacer_queue_timeout 系统性修复)
+## R1255 本轮改了什么
 
-1. **问题**: oc45001 pacer (`MAX_CONCURRENCY=1`, `QUEUE_TIMEOUT_S=20`) 在长请求 (50-60s) 占满
-   唯一并发闸时, 新请求等 20s 后返回 429 `pacer_queue_timeout`. hm4104 forwarder 归为
-   `client_4xx` 不触发 fallback → 用户直接看到错误.
-2. **与 ChatGPT 系统讨论后方案**:
-   - **forwarder.py**: 新增 `_is_pacer_queue_timeout()` 函数, 429 + pacer_queue_timeout
-     归为 `server_5xx` → 触发 fallback 到 dsv4f0731_nv40666 (NVCF)
-   - **oc45001 compose**: `QUEUE_TIMEOUT_S` 20→10 (fail-fast; 必须 > MIN_INTERVAL_S=8)
-   - **不改**: 不 bypass pacer, 不在 oc45001 内做 fallback, 不改 MAX_CONCURRENCY
-3. **文件**: forwarder.py (cc-adapter bind-mount, 3 容器共享), oc-proxy compose
-4. **应用**: restart opclaw4103 hm4104 oc4105 (源码), up -d oc45001 (env)
-
-## R1258 验证
-
-- 容器: oc45001/hm4104/opclaw4103/oc4105 全 Up ✅
-- env: OZ_QUEUE_TIMEOUT_S=10 ✅
-- forwarder: `_is_pacer_queue_timeout` × 2 引用 ✅
-- health: 4 容器 ok ✅
-- 烟雾测试: hm4104 → 200 OK, big-pickle "2", 2826ms ✅
-
-## R1264 前轮改了什么 (hm4104 fallback 修正: ms_gw→dsv4f0731_nv40666)
-
-1. **根因**: hm4104 compose 的 FALLBACK_URL 历史残留指向 ms_gw:40007 (model=dsv4f0731_ms),
-   用户要求 fallback 应为 dsv4f0731_nv40666 (model=dsv4f0731_nv, NVCF pexec)
-2. **修复**: docker-compose.yml hm4104 service 3 处编辑:
-   - FALLBACK_URL: ms_gw:40007 → dsv4f0731_nv40666:40666
-   - FALLBACK_MODEL: dsv4f0731_ms → dsv4f0731_nv
-   - 新增 FALLBACK_API_KEY=nv-gw-token (dsv4f0731_nv40666 入站 Bearer)
-3. **应用**: `docker compose up -d hm4104` (env 改动用 up -d 非 restart)
-
-## R1264 验证
-
-- 容器: hm4104 Up ✅
-- env: FALLBACK_URL=http://dsv4f0731_nv40666:40666/v1, FALLBACK_MODEL=dsv4f0731_nv, FALLBACK_API_KEY=nv-gw-token ✅
-- health: status=ok, primary=oc45001/big-pickle, fallback=dsv4f0731_nv40666/dsv4f0731_nv ✅
-- primary 烟雾测试: POST /v1/chat/completions → 200 OK, model=big-pickle ✅
-
-## R1263 前轮改了什么 (oc45001 64 IP 轮转池 + 6 BUG 修复)
-
-1. hermes 已将 mihomo 64 个 IP 节点 (端口 7910,7914-7915,7918-7978) 加入 oc45001 OZ_PROXY_LIST
-2. DB 验证: 重启后 20+ distinct proxy_idx 分布, IP 轮转生效
-3. 6 BUG 修复 (handlers.py + pacer.py):
-   - BUG 1: report_ok 无条件调用 → 仅 status=200 无 error 时调用 (保护指数退避)
-   - BUG 2: 成功时 status 未设 200 → 在 return 前显式设 status=200
-   - BUG 3: _send_json 不支持 extra_headers → 添加 extra_headers 参数 (Retry-After 排序)
-   - BUG 4: Retry-After 调用点未用 extra_headers → pacer_timeout + all-429 两处修正
-   - BUG 5: _proxy_counter 非线程安全 (全局 int) → 改为 itertools.count (原子自增)
-   - BUG 6: 删除死代码 _proxy_error_body (未使用)
-   - pacer: 信号量过早释放 → acquire 不释放, 新增 release() 在 handler finally 调用
+1. **config.py glm5_2_nv function_ids 精简**: 5 候选 → 2 候选 (删 3 个 INACTIVE 死 fid b6029a96/b1b22d03/5532e90c).
+2. **cc4101 compose env 切链**: primary dsv4f0731_nv@40666 → glm5_2_nv@40006; fallback dsv4f0731_ms → glm5_2_ms (同模型跨供应商).
 
 ## 前序
 
-- R1263: oc45001 64 IP 轮转池 + 6 BUG 修复
-- R1256c: opclaw4103 primary→ms_gw glm5_2_ms, fallback→nv_gw glm5_2_nv
-- R1255: cc4101 链路切 glm5_2_nv primary + glm5_2_ms fallback
+- R1255: config.py 死fid精简 + cc4101 链路切 glm5_2_nv primary + glm5_2_ms fallback
+- R1254: NVU_ACTIVE_TIERS 白名单 (40006=glm5_2_nv, 40666=dsv4f0731_nv, 40066=dsv4p_nv)
+- R1253: KEY_FID_BIND 清空 + func_health 动态切换 + fid_discovery probe 修复
 
 ## 关键 deadline 层级
 
@@ -131,16 +95,16 @@ hm4104 (port 4104) — cc-adapter (hermes 客户端):
 | `b1b22d03` | ❌ INACTIVE | 同上, 已删 |
 | `5532e90c` | ❌ INACTIVE | 同上, 已删 |
 
+## HM1 状态 (R1256b 后)
+
+- HM1 nv_gw/cc4101/ms_gw 源码已与 HM2 对齐 (2026-08-13)
+- HM1 docker-compose env 已补齐 (40 个 R1256 标签)
+- HM1 备份: /tmp/hm1_{nv_gw,cc4101,ms_gw}_backup_R1256/
+- HM1 SSH: `ssh -p 222 opc_uname@100.109.153.83`
+- HM1 特有配置保留: mihomo 5端口(7894/5/6/7/9, 无7901), 独立 US IPs, host.docker.internal proxy
+
 ## 下一步
 
-- 观察 30min opclaw4103 日志, 确认 pacer_queue_timeout 消除
-- 若 oc45001 上游 (opencode.ai) 仍间歇 429 (free_usage_limit), 考虑增加出口 IP
-- dsv4f0731_nv40666 empty 200 (NVCF 限流) 需单独跟踪
-- HM2 本地下窗口 NOP 巡检 (cc4101 链路 glm5_2_nv primary)
-
-## R1257 oc45001 pacer 信号量泄漏修复 (2026-08-15)
-
-- **问题**: oc45001 hermes 报错 `queue timeout: global concurrency gate busy (pacer_queue_timeout)`
-- **根因**: `handlers.py` pacer 超时路径 `finally` 块无条件 `pacer.release()` 释放从未 acquire 的 sem → 信号量泄漏, 每次 pacer 超时 sem 计数 +1, MAX_CONCURRENCY=1 失效
-- **修复**: 新增 `sem_acquired` flag, 仅在成功 acquire 后 release; 删除 pacer error 路径重复 `db.enqueue`
-- **验证**: restart 后 10min 9/9 200 OK, 无新 pacer timeout
+- 等 HM1 cc 产生新流量, 观察 30min 窗口 SR + "Server error mid response" 是否消失
+- HM2 本地下窗口 NOP 巡检 (R1255 链路 glm5_2_nv primary + glm5_2_ms fallback)
+- 关注 3b9748d8 429 是否持续, 若持续考虑只保留 bfcf495b 单 fid
