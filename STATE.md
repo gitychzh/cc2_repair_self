@@ -1,6 +1,6 @@
-# STATE.md — cc2 自优化 nv_gw 链路 (R1264, 2026-08-15)
+# STATE.md — cc2 自优化 nv_gw 链路 (R1259, 2026-08-15)
 
-## 当前架构 (R1264, 实测 2026-08-15 校正)
+## 当前架构 (R1259, 实测 2026-08-15 校正)
 
 ```
 你(cc2, claude-opus-5) → cc4101 (127.0.0.1:4101)
@@ -22,19 +22,61 @@ ms_gw (40007) — glm5_2_ms (ModelScope 中国, 7 key, 10 variant):
   └─ DEFAULT_MODEL=glm5_2_ms, 同模型跨供应商真备用
 
 opclaw4103 (port 4103) — 独立 cc-adapter (openclaw 客户端):
-  ├─ Primary:   ms_gw:40007  → glm5_2_ms  (ModelScope, OpenAI SSE, 92% SR)
+  ├─ Primary:   oc45001:45001 → big-pickle (opencode zen 免费模型, 29 IP 轮转池)
   ├─ Fallback:  nv_gw:40006 → glm5_2_nv  (NVCF pexec, NVCF 降级时备用)
   ├─ PRIMARY_HEADER_TIMEOUT=90, FALLBACK_HEADER_TIMEOUT=70
-  └─ API keys: NV_GW_API_KEY=ms-gw-token (primary), FALLBACK_API_KEY=nv-gw-token (fallback)
+  └─ API keys: NV_GW_API_KEY=oc-proxy-token (primary), FALLBACK_API_KEY=nv-gw-token (fallback)
 
 hm4104 (port 4104) — cc-adapter (hermes 客户端):
-  ├─ Primary:   oc45001:45001 → big-pickle (opencode zen 免费模型, 64 IP 轮转池)
+  ├─ Primary:   oc45001:45001 → big-pickle (opencode zen 免费模型, 29 IP 轮转池)
   ├─ Fallback:  dsv4f0731_nv40666:40666 → dsv4f0731_nv (NVCF pexec, R1264 修正)
   ├─ API keys: NV_GW_API_KEY=oc-proxy-token (primary), FALLBACK_API_KEY=nv-gw-token (fallback)
-  └─ R1263: oc45001 64 端口 IP 轮转 + 6 BUG 修复 (report_ok/status/semaphore/thread-safety)
+  └─ R1259: oc45001 死 IP 清理 (64→29) + ttfb_ms 修复 + compose 注释清理
 ```
 
-## R1264 本轮改了什么 (hm4104 fallback 修正: ms_gw→dsv4f0731_nv40666)
+## R1259 本轮改了什么 (openclaw BUG 排查与修复)
+
+1. **架构核实**: opclaw4103 primary=oc45001(big-pickle), fallback=nv_gw(40006,glm5_2_nv).
+   dsv4f0731_nv40666 是 hm4104/oc4105 的 fallback, 不是 opclaw4103 的.
+2. **BUG #2 修复**: oc_requests.ttfb_ms 永远 NULL → handlers.py 加 `request_row["ttfb_ms"] = attempt_row.get("ttfb_ms")`
+3. **BUG #3 修复**: docker-compose.yml opclaw4103 注释清理 (ms_gw→oc45001, depends_on 修正)
+4. **BUG #4 修复**: 从 OZ_PROXY_LIST 移除 34 个 0% SR 死 IP (64→29 有效 IP)
+5. **IP 轮转核实**: 确认 itertools.count() 按顺序轮流, 429 时顺序切下一个
+6. **dsv4f0731_nv40666 5key 健康度**: key3 最优(96.3% SR, 0 次重试), key0 最差(84.8%, 5x exhausted)
+7. **文件**: handlers.py, oc-proxy/docker-compose.yml, docker-compose.yml
+8. **应用**: up -d oc45001 (env 改动); opclaw4103 compose 注释改动无需重启
+
+## R1259 验证
+
+- 容器: oc45001 Up healthy ✅, opclaw4103/hm4104/oc4105 Up ✅
+- oc45001 IP 列表: 29 个有效 IP 加载 ✅ (原 64 个, 移除 34 死 IP)
+- handlers.py: ttfb_ms 同步到 request_row ✅ (DB 新请求 ttfb_ms 有值: 2377/3087/4518ms)
+- status=200: 新请求正确记录 ✅ (R1258 已修复, 本轮验证确认)
+- 烟雾测试: opclaw4103 → 200 OK, big-pickle "Hello" ✅
+- compose 注释: opclaw4103 注释与实际链路一致 ✅
+
+## R1258 前轮改了什么 (pacer_queue_timeout 系统性修复)
+
+1. **问题**: oc45001 pacer (`MAX_CONCURRENCY=1`, `QUEUE_TIMEOUT_S=20`) 在长请求 (50-60s) 占满
+   唯一并发闸时, 新请求等 20s 后返回 429 `pacer_queue_timeout`. hm4104 forwarder 归为
+   `client_4xx` 不触发 fallback → 用户直接看到错误.
+2. **与 ChatGPT 系统讨论后方案**:
+   - **forwarder.py**: 新增 `_is_pacer_queue_timeout()` 函数, 429 + pacer_queue_timeout
+     归为 `server_5xx` → 触发 fallback 到 dsv4f0731_nv40666 (NVCF)
+   - **oc45001 compose**: `QUEUE_TIMEOUT_S` 20→10 (fail-fast; 必须 > MIN_INTERVAL_S=8)
+   - **不改**: 不 bypass pacer, 不在 oc45001 内做 fallback, 不改 MAX_CONCURRENCY
+3. **文件**: forwarder.py (cc-adapter bind-mount, 3 容器共享), oc-proxy compose
+4. **应用**: restart opclaw4103 hm4104 oc4105 (源码), up -d oc45001 (env)
+
+## R1258 验证
+
+- 容器: oc45001/hm4104/opclaw4103/oc4105 全 Up ✅
+- env: OZ_QUEUE_TIMEOUT_S=10 ✅
+- forwarder: `_is_pacer_queue_timeout` × 2 引用 ✅
+- health: 4 容器 ok ✅
+- 烟雾测试: hm4104 → 200 OK, big-pickle "2", 2826ms ✅
+
+## R1264 前轮改了什么 (hm4104 fallback 修正: ms_gw→dsv4f0731_nv40666)
 
 1. **根因**: hm4104 compose 的 FALLBACK_URL 历史残留指向 ms_gw:40007 (model=dsv4f0731_ms),
    用户要求 fallback 应为 dsv4f0731_nv40666 (model=dsv4f0731_nv, NVCF pexec)
@@ -96,3 +138,10 @@ hm4104 (port 4104) — cc-adapter (hermes 客户端):
 - 观察 hm4104 fallback 触发率 (目标 < 5%, oc45001 SR 99%+ 时极少触发)
 - 如 fallback 实际触发, 验证 dsv4f0731_nv40666 端到端 200 OK
 - HM2 本地下窗口 NOP 巡检 (cc4101 链路 glm5_2_nv primary)
+
+## R1257 oc45001 pacer 信号量泄漏修复 (2026-08-15)
+
+- **问题**: oc45001 hermes 报错 `queue timeout: global concurrency gate busy (pacer_queue_timeout)`
+- **根因**: `handlers.py` pacer 超时路径 `finally` 块无条件 `pacer.release()` 释放从未 acquire 的 sem → 信号量泄漏, 每次 pacer 超时 sem 计数 +1, MAX_CONCURRENCY=1 失效
+- **修复**: 新增 `sem_acquired` flag, 仅在成功 acquire 后 release; 删除 pacer error 路径重复 `db.enqueue`
+- **验证**: restart 后 10min 9/9 200 OK, 无新 pacer timeout
