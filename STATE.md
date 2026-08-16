@@ -1,6 +1,38 @@
 # STATE.md — cc2 自优化 nv_gw 链路 (R1256b, 2026-08-13)
 
-## R2423 本轮 (2026-08-15, 诊断分析轮 NOP)
+## R2424 本轮 (2026-08-16, oc45001 PersistentCounter bug fix)
+
+### 报错
+hermes 报 "primary 和 fallback 均不可用"
+
+### 定位
+- 报错来源: **openclaw 链路** (opclaw4103), 非 cc2 主链路
+- cc4101→nv_gw 主链路完全正常: 6h 45/45 = 100% SR
+- openclaw4103 primary (oc45001): 502 `'PersistentCounter' object is not an iterator`
+- openclaw4103 fallback (40666): 502 all_tiers_exhausted (NVCF deepseek-v4-flash-0731 空响应, 后端问题)
+
+### 根因
+oc45001 代理代码 `rot_state.py` R8 更新引入 `PersistentCounter` 替代 `itertools.count`,
+但 `PersistentCounter` 只实现 `.next()` 方法没有 `__next__` dunder。
+`handlers.py:356` 和 `egress_health.py:113` 仍用 built-in `next(counter)` 调用 → TypeError → 502
+→ primary 全部请求 502, fallback 也因 NVCF 空响应 502 → "均不可用"
+
+### 修复
+- `handlers.py:356`: `next(_proxy_counter)` → `_proxy_counter.next()`
+- `egress_health.py:113`: `next(_rot)` → `_rot.next()`
+- 备份: `.bak.R2424`
+
+### 验证
+- oc45001 直测: 200 OK 2.4s ✅
+- opclaw4103 端到端: 200 OK 8.5s ✅
+- cc4101 主链路: 200 OK 17s ✅ (一直正常)
+
+### 下一步
+- 监控 openclaw 链路稳定性
+- 40666 NVCF 空响应持续观察 (后端问题, NOP)
+
+
+## R2423 (2026-08-15, 诊断分析轮 NOP)
 
 ### 本轮做了什么
 用户要求深挖 40666 dsv4f0731_nv empty_200 问题. 全面诊断:
